@@ -1,1 +1,4714 @@
+<!DOCTYPE html>
+<html lang="FR">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+    <title>STELLANTIS MGV SCANNER</title>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&amp;display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700;800&amp;display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <!-- Client Supabase (remplace l'ancienne dépendance Google Apps Script) -->
+   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+   
+    <style>
+    :root {
+        --primary: #eaea00;
+        --primary-glow: rgba(234, 234, 0, 0.4);
+        --surface: #131313;
+        --surface-bright: #222222;
+        --surface-container: #1b1b1b;
+        --on-surface: #ffffff;
+        --on-surface-variant: #a0a0a0;
+        --outline: #333333;
+        --error: #cc2929;
+        --success: #2e7d32;
+        --font-main: 'Barlow Condensed', sans-serif;
+        
+        /* Harmonisation des couleurs demandées */
+        --vis-color: #00e5ff;
+        --name-color: #ffffff;
+        --scan-instruction-color: #ff3b30; /* Rouge doré/orangé pour les instructions et icônes de scan */
+    }
 
+    * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        -webkit-tap-highlight-color: transparent;
+        text-transform: uppercase;
+    }
+
+    html {
+        height: 100%;
+    }
+
+    /* ============================= */
+    /* VERROUILLAGE ORIENTATION (PORTRAIT FIXE) */
+    /* Empêche toute rotation visuelle de l'interface   */
+    /* lors d'un changement d'orientation du téléphone. */
+    /* N'affecte ni le scanner ni les autres modules :   */
+    /* seule l'orientation de rendu est figée.           */
+    /* ============================= */
+    @media screen and (orientation: landscape) {
+        html {
+            transform: rotate(-90deg);
+            transform-origin: left top;
+            width: 100vh;
+            height: 100vw;
+            overflow: hidden;
+            position: absolute;
+            top: 100%;
+            left: 0;
+        }
+    }
+
+    body {
+        background-color: var(--surface);
+        color: var(--on-surface);
+        font-family: var(--font-main);
+        overflow: hidden;
+        height: 100vh;
+        width: 100vw;
+    }
+
+    #app {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        width: 100vw;
+        position: relative;
+    }
+
+    .top-app-bar {
+        height: 64px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 16px;
+        border-bottom: 2px solid #222;
+        background: linear-gradient(135deg, #131313 0%, #1c1c1c 100%);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+        flex-shrink: 0;
+    }
+
+    .logo-container {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: linear-gradient(90deg, #eaea00 0%, #00e5ff 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+
+    .logo-container .material-icons {
+        -webkit-text-fill-color: initial;
+        color: #eaea00;
+        filter: drop-shadow(0 0 8px var(--primary-glow));
+        animation: pulseGlow 2s ease-in-out infinite alternate;
+    }
+
+    .brand-title {
+        font-size: 22px;
+        font-weight: 700;
+        letter-spacing: 1px;
+    }
+
+    .top-right-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .icon-button {
+        background: none;
+        border: none;
+        color: var(--on-surface-variant);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        transition: color 0.2s ease, transform 0.2s ease;
+    }
+
+    .icon-button:hover {
+        transform: scale(1.1);
+    }
+    
+    #logoutBtn {
+        color: var(--error) !important;
+    }
+
+    #torchBtn.active {
+        color: var(--primary);
+        filter: drop-shadow(0 0 8px var(--primary-glow));
+    }
+
+    main {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        position: relative;
+    }
+
+    .view {
+        display: none;
+        height: 100%;
+        width: 100%;
+        padding: 16px;
+        position: relative;
+    }
+
+    .view.active {
+        display: flex;
+        flex-direction: column;
+        animation: fadeInView 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .auth-container {
+        max-width: 400px;
+        width: 100%;
+        margin: auto;
+        text-align: center;
+    }
+
+    .hero-logo {
+        font-size: 64px;
+        font-weight: 700;
+        background: linear-gradient(135deg, #eaea00 0%, #ffffff 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        line-height: 1;
+        margin-bottom: 5px;
+    }
+
+    .hero-subtitle {
+        font-size: 14px;
+        letter-spacing: 4px;
+        margin-bottom: 40px;
+        color: var(--on-surface-variant);
+    }
+
+    .auth-form {
+        text-align: left;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    .auth-form .btn-text {
+        color: var(--on-surface);
+        margin-top: 10px;
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-family: inherit;
+        text-decoration: underline;
+    }
+
+    .auth-form .btn-outline {
+        border: 1px solid var(--primary);
+        color: var(--primary);
+        background: transparent;
+        border-radius: 4px;
+        transition: background 0.2s;
+    }
+
+    .auth-form .btn-outline:hover {
+        background: rgba(234, 234, 0, 0.1);
+    }
+
+    .input-group {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .input-group label {
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--on-surface-variant);
+    }
+
+    .input-group input,
+    .input-group select {
+        background: var(--surface-container);
+        border: 1px solid var(--outline);
+        color: var(--on-surface);
+        padding: 14px;
+        font-family: inherit;
+        font-size: 16px;
+        border-radius: 4px;
+        transition: border-color 0.2s;
+    }
+
+    .input-group input:focus,
+    .input-group select:focus {
+        border-color: var(--primary);
+        outline: none;
+    }
+
+    .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+    }
+
+    .view-title {
+        font-size: 24px;
+        font-weight: 700;
+        margin-bottom: 16px;
+        color: var(--primary);
+        text-align: center;
+    }
+
+    .btn {
+        padding: 14px;
+        font-weight: 700;
+        border: none;
+        cursor: pointer;
+        font-family: inherit;
+        font-size: 14px;
+        text-align: center;
+        border-radius: 4px;
+        transition: transform 0.1s ease, filter 0.2s;
+    }
+
+    .btn:active {
+        transform: scale(0.98);
+    }
+
+    .btn-primary {
+        background: var(--primary);
+        color: #000;
+    }
+
+    .btn-primary:hover {
+        filter: brightness(1.1);
+    }
+
+    .btn-primary:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    .operator-bar {
+        background: var(--surface-container);
+        padding: 12px 16px;
+        border-left: 4px solid var(--primary);
+        margin-bottom: 12px;
+        border-radius: 0 4px 4px 0;
+        flex-shrink: 0;
+        display: flex;
+        justify-content: space-between;
+    }
+
+    .op-info {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .op-info .label { font-size: 10px; color: var(--on-surface-variant); }
+      .op-info .value { 
+        font-size: 18px; 
+        font-weight: 700; 
+        color: var(--primary); 
+        letter-spacing: 0.5px;
+    }
+
+    .text-right {
+        text-align: right;
+    }
+
+    .step-indicator {
+        background: var(--surface-bright);
+        color: var(--on-surface);
+        padding: 10px;
+        text-align: center;
+        font-weight: 700;
+        margin-bottom: 12px;
+        border: 1px dashed var(--outline);
+        font-size: 16px;
+        border-radius: 4px;
+        flex-shrink: 0;
+    }
+
+    .scanner-container {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        padding-bottom: 72px; 
+    }
+
+    .scanner-viewport {
+        flex: 1;
+        border: 1px solid var(--outline);
+        position: relative;
+        overflow: hidden;
+        background: #000;
+        border-radius: 4px;
+    }
+
+    /* ZONE DES INSTRUCTIONS DE SCAN - EN ROUGE ORANGÉ */
+    
+    .instruction-container .material-icons {
+    color: #b87333; /* Couleur Cuivre Doré */
+    font-size: 24px;
+    filter: drop-shadow(0 0 4px rgba(184, 115, 51, 0.4)); /* Effet d'éclat cuivré discret */
+}
+
+        #targetInstructions {
+        font-size: 18px;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        color: var(--scan-instruction-color);
+    }
+
+    .corner.tl { top: 16px; left: 16px; border-right: none; border-bottom: none; border-top-left-radius: 4px; }
+    .corner.tr { top: 16px; right: 16px; border-left: none; border-bottom: none; border-top-right-radius: 4px; }
+    .corner.bl { bottom: 16px; left: 16px; border-right: none; border-top: none; border-bottom-left-radius: 4px; }
+    .corner.br { bottom: 16px; right: 16px; border-left: none; border-top: none; border-bottom-right-radius: 4px; }
+
+    #reader__scan_region {
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+    }
+
+    #reader__scan_region > div {
+        border-width: 40px !important; 
+    }
+
+    .history-wrapper {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        width: 100%;
+        overflow: hidden;
+    }
+
+    .sync-status {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding-bottom: 8px;
+        font-size: 18px;
+        flex-shrink: 0;
+    }
+    
+    .status-left {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .sync-rotating {
+        display: inline-block !important;
+        animation: spin 1s linear infinite !important;
+    }
+
+    .badge { padding: 4px 8px; font-weight: 700; border-radius: 2px; }
+    .badge.online { background: var(--primary); color: #000; }
+    .badge.offline { background: var(--error); color: #ffffff; }
+
+    .table-actions {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6px;
+        margin-bottom: 8px;
+        flex-shrink: 0;
+    }
+
+    .action-btn {
+        padding: 10px 2px;
+        font-size: 17px;
+        font-weight: 700;
+        font-family: var(--font-main);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        cursor: pointer;
+        border: none;
+        border-radius: 4px;
+        transition: filter 0.2s;
+    }
+
+    .action-btn:hover {
+        filter: brightness(1.1);
+    }
+
+    #openManualModal { background: #cc2929; color: #ffffff; }
+    #openSearchBtn { background: var(--primary); color: #131313; }
+    #refreshBtn { background: #007bc4; color: #ffffff; }
+    #exportCsvBtn { background: var(--success); color: #ffffff; }
+
+    .search-sliding-bar {
+        max-height: 0;
+        overflow: hidden;
+        background: var(--surface-container);
+        border-radius: 4px;
+        transition: max-height 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        flex-shrink: 0;
+    }
+
+    .search-sliding-bar.open {
+        max-height: 56px;
+        margin-bottom: 8px;
+        border: 1px solid var(--primary);
+    }
+
+    .search-sliding-inner {
+        padding: 10px 14px;
+        display: flex;
+        align-items: center;
+    }
+
+    .search-sliding-inner input {
+        width: 100%;
+        background: transparent;
+        border: none;
+        color: var(--on-surface);
+        font-family: var(--font-main);
+        font-size: 18px;
+        font-weight: 700;
+        outline: none;
+    }
+
+    .table-terminal-container {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        border: 1px solid var(--outline);
+        border-radius: 4px;
+        background: var(--surface-container);
+        height: 100%;
+    }
+
+    .industrial-grid {
+        display: flex;
+        flex-direction: column;
+        width: 100%; 
+        height: 100%;
+        overflow: hidden;
+    }
+
+    .grid-header {
+        display: grid;
+        grid-template-columns: 0.75fr 1.35fr 1.45fr 1.15fr 0.45fr; 
+        align-items: center;
+        width: 100%;
+        flex-shrink: 0;
+        background: var(--surface-container);
+        border-bottom: 1px solid var(--outline);
+    }
+
+    .grid-body {
+        flex: 1;
+        overflow-y: auto;
+        overflow-x: hidden;
+        width: 100%;
+        scrollbar-width: thin;
+        scrollbar-color: var(--outline) transparent;
+    }
+
+    .grid-body::-webkit-scrollbar {
+        width: 6px;
+    }
+    .grid-body::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    .grid-body::-webkit-scrollbar-thumb {
+        background-color: var(--outline);
+        border-radius: 4px;
+    }
+
+    .grid-row {
+        display: grid;
+        grid-template-columns: 0.75fr 1.35fr 1.45fr 1.15fr 0.45fr; 
+        align-items: center;
+        width: 100%;
+        border-bottom: 1px solid rgba(51, 51, 51, 0.5);
+    }
+
+    .grid-header .grid-cell {
+        color: var(--primary) !important;
+        font-weight: 800;
+        font-size: 11px;
+        letter-spacing: 0;
+        white-space: nowrap;
+        padding: 12px 4px;
+    }
+
+.grid-cell {
+    padding: 10px 4px;
+    font-size: 14px;
+    text-align: center;
+    min-width: 0;
+}
+
+/* ========================================= */
+/* TABLEAU HISTORIQUE (style terminal)       */
+/* ========================================= */
+
+
+.grid-body .grid-row {
+    min-height: 64px;
+    background: #101214;
+}
+
+.grid-body .grid-row:nth-child(even) {
+    background: #14171a;
+}
+
+.grid-row .grid-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+}
+
+.grid-header .grid-cell {
+    display: block;
+    font-family: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+}
+
+.grid-row .col-op {
+    font-size: 16px;
+    font-weight: 700;
+    color: #ffffff;
+    border-right: 1px solid var(--outline);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: block;
+    line-height: 64px;
+    padding: 0 4px;
+}
+
+.grid-row .col-vis {
+    font-size: 19px;
+    font-weight: 800;
+    color: var(--vis-color);
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+
+.grid-row .col-nom {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--name-color);
+    white-space: normal;
+    word-break: break-word;
+    line-height: 1.2;
+}
+
+.grid-row .col-dh {
+    gap: 2px;
+}
+
+.dh-date {
+    font-size: 12px;
+    font-weight: 500;
+    color: #7d8187;
+    letter-spacing: 0.5px;
+}
+
+.dh-time {
+    font-size: 17px;
+    font-weight: 800;
+    color: #ffffff;
+}
+
+.status-sync {
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+
+.grid-row .col-act {
+    padding: 0;
+}
+
+.btn-delete {
+    color: var(--error);
+    padding: 12px;
+}
+
+.col-zone { display: none; } 
+
+    .grid-row.highlight-match {
+        background: rgba(234, 234, 0, 0.18) !important;
+        border-top: 1px solid var(--primary);
+        border-bottom: 1px solid var(--primary);
+        animation: industrialGlow 1.2s ease-in-out infinite alternate;
+    }
+
+    .status-sync { font-weight: 700; }
+    .status-sync.ok { color: #2e7d32; }
+    .status-sync.pending { color: #eaea00; }
+
+    .btn-delete {
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: var(--error);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: transform 0.1s;
+    }
+    .btn-delete:active { transform: scale(0.85); }
+
+    .industrial-modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.75);
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+        z-index: 300;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+    }
+
+    .industrial-modal.active {
+        display: flex;
+    }
+
+    .ind-modal-content {
+        width: 100%;
+        max-width: 420px;
+        background: rgba(19, 19, 19, 0.98);
+        border: 2px solid var(--primary);
+        padding: 24px;
+        border-radius: 8px;
+        box-shadow: 0 0 25px rgba(234, 234, 0, 0.3);
+        animation: modalRise 0.25s cubic-bezier(0, 0, 0.2, 1);
+    }
+
+    .ind-modal-title {
+        font-size: 14px;
+        color: var(--primary);
+        letter-spacing: 2px;
+        margin-bottom: 16px;
+        font-weight: 700;
+        text-align: center;
+    }
+
+    .ind-modal-value {
+        font-size: 28px;
+        color: #ffffff;
+        font-weight: 700;
+        text-align: center;
+        margin-bottom: 24px;
+        background: var(--surface-container);
+        padding: 12px;
+        border-radius: 4px;
+        border: 1px solid var(--outline);
+        letter-spacing: 2px;
+    }
+
+    .ind-modal-input-wrap {
+        margin-bottom: 24px;
+    }
+
+    .ind-modal-input-wrap input {
+        width: 100%;
+        background: var(--surface-container);
+        border: 1px solid var(--outline);
+        color: #ffffff;
+        padding: 14px;
+        font-family: var(--font-main);
+        font-size: 24px;
+        font-weight: 700;
+        text-align: center;
+        outline: none;
+        border-radius: 4px;
+    }
+
+    .ind-modal-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+    }
+
+    .ind-btn {
+        padding: 14px;
+        font-family: var(--font-main);
+        font-size: 12px;
+        font-weight: 700;
+        border: none;
+        cursor: pointer;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        transition: filter 0.2s;
+    }
+    .ind-btn:hover { filter: brightness(1.1); }
+
+    .ind-btn-ok { background: var(--primary); color: #000; }
+    .ind-btn-cancel { background: var(--error); color: #fff; }
+    .ind-btn-scan { background: #34495e; color: var(--primary); border: 1px solid var(--primary); }
+
+    .bottom-nav {
+        position: fixed;
+        bottom: 0;
+        width: 100%;
+        height: 72px;
+        background: var(--surface);
+        display: none;
+        border-top: 1px solid var(--outline);
+        z-index: 100;
+        flex-shrink: 0;
+    }
+
+    .nav-item {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: none;
+        border: none;
+        color: var(--on-surface-variant);
+        gap: 4px;
+        cursor: pointer;
+        font-family: inherit;
+        transition: background 0.2s, color 0.2s;
+    }
+
+    .nav-item.active { background: var(--primary); color: #000; }
+    .nav-label { font-size: 11px; font-weight: 700; letter-spacing: 0.5px; }
+
+    .toast-notification {
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%) translateY(-50px);
+        background: var(--success);
+        color: white;
+        padding: 14px 24px;
+        font-weight: 700;
+        border-radius: 4px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        z-index: 500;
+        opacity: 0;
+        transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s ease;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        pointer-events: none;
+    }
+
+    .toast-notification.show {
+        transform: translateX(-50%) translateY(0);
+        opacity: 1;
+    }
+
+    @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+    @keyframes fadeInView {
+        from { opacity: 0; transform: translateY(4px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes modalRise {
+        from { transform: scale(0.92); opacity: 0; }
+        to { transform: scale(1); opacity: 1; }
+    }
+@keyframes pulseGlow {
+        from { filter: drop-shadow(0 0 4px var(--primary-glow)); }
+        to { filter: drop-shadow(0 0 12px rgba(234, 234, 0, 0.8)); }
+    }
+</style>
+  </head>
+<body>
+<div id="app">
+<header class="top-app-bar">
+    <div class="logo-container">
+        <span class="material-icons">precision_manufacturing</span>
+        <span class="brand-title">STELLANTIS MGV</span>
+    </div>
+       <button class="icon-button" id="torchBtn" title="ACTIVER LA TORCHE" style="display: none;">
+        <span class="material-icons">flash_off</span>
+    </button>
+    <div class="top-right-actions">
+        <button class="icon-button" id="logoutBtn" style="display: none;">
+            <span class="material-icons">logout</span>
+        </button>
+    </div>
+</header>
+<main id="main-content">
+        <section class="view active" id="login-view">
+            <div class="auth-container">
+                <h1 class="hero-logo">STELLANTIS</h1>
+                <p class="hero-subtitle">MOBILE GATEWAY VEHICLE</p>
+                <form class="auth-form" id="loginForm">
+                    <div class="input-group">
+                        <label>ID MATRICULE</label>
+                        <input id="loginId" placeholder="00000000" required="" type="text"/>
+                    </div>
+                    <div class="input-group">
+                        <label>MOT DE PASSE</label>
+                        <input id="loginPass" placeholder="********" required="" type="password"/>
+                    </div>
+                    <button class="btn btn-primary" type="submit" id="loginSubmitBtn">SE CONNECTER</button>
+                    <button class="btn btn-outline" id="toRegister" type="button">CRÉER UN COMPTE</button>
+                    <button class="btn btn-text" id="toForgot" type="button">MOT DE PASSE OUBLIÉ ?</button>
+                </form>
+            </div>
+        </section>
+
+        <section class="view" id="register-view">
+            <div class="auth-container">
+                <h2 class="view-title">INSCRIPTION</h2>
+                <form class="auth-form" id="registerForm">
+                    <div class="form-row">
+                        <div class="input-group">
+                            <label>NOM</label>
+                            <input id="regNom" required="" type="text"/>
+                        </div>
+                          <div class="input-group">
+                            <label>PRÉNOM</label>
+                            <input id="regPrenom" required="" type="text"/>
+                        </div>
+                    </div>
+                    <div class="input-group">
+                        <label>ID MATRICULE</label>
+                        <input id="regId" required="" type="text"/>
+                    </div>
+                    <div class="input-group">
+                        <label>ÉQUIPE</label>
+                        <select id="regEquipe" required="">
+                            <option disabled="" selected="" value="">SÉLECTIONNER...</option>
+                            <option value="Équipe A">Équipe A</option>
+                            <option value="Équipe B">Équipe B</option>
+                            <option value="Équipe C">Équipe C</option>
+                            <option value="Équipe Fer/A">Équipe Fer/A</option>
+                            <option value="Équipe Fer/B">Équipe Fer/B</option>
+                              <option value="Équipe Fer/C">Équipe Fer/C</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label>MOT DE PASSE</label>
+                        <input id="regPass" required="" type="password"/>
+                    </div>
+                    <button class="btn btn-primary" type="submit" id="registerSubmitBtn">VALIDER</button>
+                    <button class="toLogin btn btn-outline" type="button">RETOUR</button>
+                </form>
+            </div>
+        </section>
+
+        <section class="view" id="forgot-view">
+            <div class="auth-container">
+                <h2 class="view-title">RÉINITIALISATION</h2>
+                <form class="auth-form" id="forgotForm">
+                    <div class="input-group">
+                        <label>ID MATRICULE</label>
+                        <input id="forgotId" required="" type="text"/>
+                    </div>
+                    <div class="input-group">
+                        <label>NOUVEAU MOT DE PASSE</label>
+                        <input id="forgotPass" required="" type="password"/>
+                    </div>
+                    <button class="btn btn-primary" type="submit" id="forgotSubmitBtn">VALIDER</button>
+                    <button class="toLogin btn btn-outline" type="button">RETOUR</button>
+                </form>
+            </div>
+        </section>
+
+<section class="view" id="scanner-view">
+    <div class="operator-bar">
+        <div class="op-info">
+            <span class="label">OPÉRATEUR</span>
+            <span class="value" id="displayUser">-</span>
+        </div>
+        <div class="op-info text-right">
+            <span class="label">ID MATRICULE</span>
+            <span class="value" id="displayId">-</span>
+        </div>
+    </div>
+    
+    <div class="step-indicator" id="scanStepIndicator">
+        MODE STANDBY / ATTENTE FLUX
+    </div>
+
+    <div class="instruction-container">
+        <span class="material-icons">qr_code_scanner</span>
+        <p id="targetInstructions">ALIGNER LA VIGNETTE VIS (EX: T5061254)</p>
+    </div>
+
+    <div class="scanner-container">
+        <div class="scanner-viewport">
+            <div class="corner tl"></div>
+            <div class="corner tr"></div>
+            <div class="corner bl"></div>
+            <div class="corner br"></div>
+            <div id="reader"></div>
+        </div>
+    </div>
+</section>
+
+        <section class="view" id="logs-view">
+            <div class="history-wrapper">
+                <div class="sync-status">
+                    <div class="status-left">
+                        <span class="material-icons" id="syncIconEl">sync</span>
+                        <span>DERNIÈRE SYNC: <span id="lastSyncTime">-</span></span>
+                    </div>
+                    <div class="badge online" id="networkStatus">EN LIGNE</div>
+                </div>
+                
+                <div class="table-actions">
+                    <button class="action-btn" id="openManualModal">
+                        <span class="material-icons">add</span> MANUEL
+                    </button>
+                    <button class="action-btn" id="openSearchBtn">
+                        <span class="material-icons">search</span> RECHERCHE
+                    </button>
+                    <button class="action-btn" id="refreshBtn">
+                        <span class="material-icons">refresh</span> ACTUALISER
+                    </button>
+                    <button class="action-btn" id="exportCsvBtn">
+                        <span class="material-icons">description</span> CSV
+                    </button>
+                </div>
+
+                <div class="search-sliding-bar" id="searchSlidingBar">
+                    <div class="search-sliding-inner">
+                        <span class="material-icons" style="color: var(--primary); margin-right: 10px;">search</span>
+                        <input id="dynamicSearchInput" placeholder="FILTRAGE IMMÉDIAT (VIS / NOM)..." type="text"/>
+                    </div>
+                </div>
+                
+                <div class="table-terminal-container">
+                    <div class="industrial-grid">
+                        <div class="grid-header">
+                            <div class="grid-cell col-op">OP</div>
+                            <div class="grid-cell col-vis">CODE VIS</div>
+                            <div class="grid-cell col-nom">NOM / PRÉNOM</div>
+                            <div class="grid-cell col-dh">DATE/HEURE</div>
+                            <div class="grid-cell col-act">ACT.</div>
+                        </div>
+                        <div class="grid-body" id="logGridBody"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <div class="industrial-modal" id="modalAutoVis">
+        <div class="ind-modal-content">
+            <div class="ind-modal-title">VIS DÉTECTÉ</div>
+            <div class="ind-modal-value" id="modalAutoVisValue">--------</div>
+            <div class="ind-modal-actions">
+                <button class="ind-btn ind-btn-cancel" id="cancelAutoVisBtn">❌ ANNULER</button>
+                <button class="ind-btn ind-btn-ok" id="submitAutoVisBtn">✅ OK</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="industrial-modal" id="modalSaisieVis">
+        <div class="ind-modal-content">
+            <div class="ind-modal-title">SAISIE MANUELLE : CODE VIS</div>
+            <div class="ind-modal-input-wrap">
+                <input id="inputVisCode" maxlength="8" placeholder="T5064533" type="text"/>
+            </div>
+            <div class="ind-modal-actions">
+                <button class="ind-btn ind-btn-cancel" id="cancelVisBtn">❌ ANNULER</button>
+                <button class="ind-btn ind-btn-ok" id="submitVisBtn">✅ OK</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="industrial-modal" id="modalSaisieNom">
+        <div class="ind-modal-content">
+            <div class="ind-modal-title">SAISIE MANUELLE : NOM / PRÉNOM</div>
+            <div class="ind-modal-input-wrap">
+                <input id="inputNomPrenom" placeholder="ELYOUSSEFI YOUSSEF" type="text"/>
+            </div>
+            <div class="ind-modal-actions">
+                <button class="ind-btn ind-btn-scan" id="scanNomModeBtn">📷 SCANNER</button>
+                <button class="ind-btn ind-btn-ok" id="submitNomBtn">✅ VALIDER</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast-notification" id="toastSuccess">
+        <span class="material-icons">check_circle</span>
+        <span>SUCCÈS : DONNÉES ENVOYÉES</span>
+    </div>
+
+    <nav class="bottom-nav">
+        <button class="nav-item" data-view="scanner-view">
+            <span class="material-icons">qr_code_scanner</span>
+            <span class="nav-label">SCANNER</span>
+        </button>
+        <button class="nav-item" data-view="logs-view">
+            <span class="material-icons">history</span>
+            <span class="nav-label">HISTORY</span>
+        </button>
+    </nav>
+</div>
+<script>
+  /* =====================================================================
+   STELLANTIS MGV - SCANNER_APP
+   VERSION FINALE CORRIGÉE - SUPABASE
+   =====================================================================
+
+   TABLE SCANNER_APP :
+
+   id           BIGINT PRIMARY KEY
+   operator_id  TEXT
+   equipe_id    TEXT
+   code         TEXT
+   nom          TEXT
+   date         TEXT
+   time         TEXT
+   created_at   TIMESTAMPTZ
+
+   TABLE PARTAGÉE AUTHENTIFICATION :
+
+   SCAN_MGV_USERS
+
+   IMPORTANT :
+   - operator_id = ID MATRICULE uniquement
+   - equipe_id   = A / B / C / FER/A / FER/B / FER/C
+   - affichage   = operator_id/equipe_id
+   - code        = CODE VIS
+   - nom         = NOM / PRÉNOM
+   - date        = YYYY-MM-DD
+   - time        = HH:mm
+===================================================================== */
+
+
+/* =====================================================================
+   1. CONFIGURATION SUPABASE
+===================================================================== */
+
+const SUPABASE_URL =
+    "https://rdhmsbqhjlmtlgrjuyxa.supabase.co";
+
+const SUPABASE_ANON_KEY =
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJkaG1zYnFoamxtdGxncmp1eXhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAyMzUxMzgsImV4cCI6MjA5NTgxMTEzOH0.0jpyr9n1TfctS28515NESvYndy03osk2nEYugksAwIo";
+
+const SUPABASE_TABLE = "SCANNER_APP";
+const SUPABASE_USERS_TABLE = "SCAN_MGV_USERS";
+
+const supabaseClient =
+    (window.supabase && SUPABASE_URL.includes("http"))
+        ? window.supabase.createClient(
+            SUPABASE_URL,
+            SUPABASE_ANON_KEY
+        )
+        : null;
+
+
+/* =====================================================================
+   2. CONSTANTES
+===================================================================== */
+
+const REGEX_VIS = /^[A-Z][0-9]{7}$/;
+const REGEX_NOM = /^[A-ZÀ-Ÿ\s]+$/;
+
+let currentUser = null;
+let isOnline = navigator.onLine;
+
+let html5QrcodeScanner = null;
+let isTorchOn = false;
+
+let currentScanTargetMode = "VIS";
+let tempTargetVis = "";
+
+let logs = [];
+
+/* --- AJOUT : gestion fiable des sessions caméra / QR / torche --- */
+let scannerOpChain = Promise.resolve();   // sérialise stop → start (une seule instance caméra)
+let scannerSessionId = 0;                 // invalide les callbacks d'une ancienne session
+let scanLocked = false;                   // anti-double lecture du QR NOM PRÉNOM
+let invalidQrTimer = null;                // message temporaire "QR CODE NON RECONNU"
+
+
+/* =====================================================================
+   3. RÉFÉRENCES DOM
+===================================================================== */
+
+const views =
+    document.querySelectorAll(".view");
+
+const navItems =
+    document.querySelectorAll(".nav-item");
+
+const logGridBody =
+    document.getElementById("logGridBody");
+
+const searchSlidingBar =
+    document.getElementById("searchSlidingBar");
+
+const dynamicSearchInput =
+    document.getElementById("dynamicSearchInput");
+
+const scanStepIndicator =
+    document.getElementById("scanStepIndicator");
+
+const targetInstructions =
+    document.getElementById("targetInstructions");
+
+const modalAutoVis =
+    document.getElementById("modalAutoVis");
+
+const modalAutoVisValue =
+    document.getElementById("modalAutoVisValue");
+
+const modalSaisieVis =
+    document.getElementById("modalSaisieVis");
+
+const modalSaisieNom =
+    document.getElementById("modalSaisieNom");
+
+const inputVisCode =
+    document.getElementById("inputVisCode");
+
+const inputNomPrenom =
+    document.getElementById("inputNomPrenom");
+
+const toastSuccess =
+    document.getElementById("toastSuccess");
+
+
+/* =====================================================================
+   4. ÉQUIPES
+===================================================================== */
+
+const TEAM_EQUIPE_ID_MAP = {
+    "Équipe A": "A",
+    "Équipe B": "B",
+    "Équipe C": "C",
+    "Équipe Fer/A": "FER/A",
+    "Équipe Fer/B": "FER/B",  
+    "Équipe Fer/C": "FER/C"
+};
+
+
+/* =====================================================================
+   5. VERROUILLAGE PORTRAIT
+===================================================================== */
+
+function lockOrientation() {
+
+    try {
+
+        if (
+            screen.orientation &&
+            typeof screen.orientation.lock === "function"
+        ) {
+
+            screen.orientation
+                .lock("portrait")
+                .catch(() => {});
+
+        }
+
+    } catch (e) {}
+
+}
+
+window.addEventListener("load", lockOrientation);
+
+window.addEventListener(
+    "orientationchange",
+    lockOrientation
+);
+
+
+/* =====================================================================
+   6. GÉNÉRATION ID BIGINT
+   IMPORTANT :
+   La table SQL utilise id BIGINT.
+   On utilise donc Date.now().
+===================================================================== */
+
+function genId() {
+
+    return Date.now();
+
+}
+
+
+/* =====================================================================
+   7. SAUVEGARDE LOCALE
+===================================================================== */
+
+function saveLogsToStorage() {
+
+    try {
+
+        localStorage.setItem(
+            "mgv_logs",
+            JSON.stringify(logs)
+        );
+
+    } catch (e) {
+
+        console.error(
+            "Erreur sauvegarde locale :",
+            e
+        );
+
+    }
+
+}
+
+
+/* =====================================================================
+   8. NETTOYAGE LOCAL 7 JOURS
+   Les données non synchronisées ne sont jamais supprimées.
+===================================================================== */
+
+function nettoyerAnciennesDonnees7Jours() {
+
+    const NB_JOURS_MAX = 7;
+
+    const maintenant = Date.now();
+
+    const limite =
+        NB_JOURS_MAX *
+        24 *
+        60 *
+        60 *
+        1000;
+
+    logs = logs.filter(log => {
+
+        if (!log.sync) {
+
+            return true;
+
+        }
+
+        const timestamp =
+            Number(log.timestamp || maintenant);
+
+        return (
+            maintenant - timestamp
+        ) < limite;
+
+    });
+
+    saveLogsToStorage();
+
+}
+
+
+/* =====================================================================
+   9. INITIALISATION DES DONNÉES LOCALES
+===================================================================== */
+
+function initializeData() {
+
+    try {
+
+        const savedLogs =
+            localStorage.getItem("mgv_logs");
+
+        if (savedLogs) {
+
+            logs =
+                JSON.parse(savedLogs);
+
+        } else {
+
+            logs = [];
+
+        }
+
+    } catch (e) {
+
+        console.error(
+            "Erreur lecture données locales :",
+            e
+        );
+
+        logs = [];
+
+    }
+
+
+    logs.forEach(log => {
+
+        if (!log.id) {
+
+            log.id =
+                genId();
+
+        }
+
+        if (!log.timestamp) {
+
+            log.timestamp =
+                Date.now();
+
+        }
+
+        if (typeof log.sync !== "boolean") {
+
+            log.sync = false;
+
+        }
+
+    });
+
+
+    nettoyerAnciennesDonnees7Jours();
+
+    renderTable();
+
+}
+
+
+/* =====================================================================
+   10. GESTION DES VUES
+===================================================================== */
+
+function showView(viewId) {
+
+    const authViews = [
+        "login-view",
+        "register-view",
+        "forgot-view"
+    ];
+
+    const navBar =
+        document.querySelector(".bottom-nav");
+
+    const logoutBtn =
+        document.getElementById("logoutBtn");
+
+    const torchBtn =
+        document.getElementById("torchBtn");
+
+
+    if (authViews.includes(viewId)) {
+
+        if (navBar)
+            navBar.style.display = "none";
+
+        if (logoutBtn)
+            logoutBtn.style.display = "none";
+
+        if (torchBtn)
+            torchBtn.style.display = "none";
+
+    } else {
+
+        if (navBar)
+            navBar.style.display = "flex";
+
+        if (logoutBtn)
+            logoutBtn.style.display = "flex";
+
+        if (torchBtn) {
+
+            torchBtn.style.display =
+                viewId === "scanner-view"
+                    ? "flex"
+                    : "none";
+
+        }
+
+    }
+
+
+    views.forEach(v => {
+
+        v.classList.remove("active");
+
+    });
+
+
+    const targetView =
+        document.getElementById(viewId);
+
+    if (targetView) {
+
+        targetView.classList.add("active");
+
+    }
+
+
+    navItems.forEach(item => {
+
+        if (
+            item.getAttribute("data-view")
+            === viewId
+        ) {
+
+            item.classList.add("active");
+
+        } else {
+
+            item.classList.remove("active");
+
+        }
+
+    });
+
+
+    if (
+        viewId === "scanner-view"
+    ) {
+
+        initWorkflowScanVIS();
+
+    } else {
+
+        stopScanner();
+
+    }
+
+}
+
+
+/* =====================================================================
+   11. NAVIGATION
+===================================================================== */
+
+navItems.forEach(item => {
+
+    item.addEventListener(
+        "click",
+        () => {
+
+            showView(
+                item.dataset.view
+            );
+
+        }
+    );
+
+});
+
+
+/* =====================================================================
+   12. SCANNER
+   MODIFIÉ :
+   - Scanner VIS : inchangé (tous formats, mêmes réglages) + torche selon préférence utilisateur
+   - Scanner NOM PRÉNOM : lecture QR CODE uniquement + torche selon préférence utilisateur
+   - stop → start sérialisés (une seule instance caméra à la fois)
+===================================================================== */
+
+function initWorkflowScanVIS() {
+
+    currentScanTargetMode =
+        "VIS";
+
+    if (scanStepIndicator) {
+
+        scanStepIndicator.textContent =
+            "ÉTAPE 1 : SCANNER LE CODE VIS";
+
+    }
+
+    if (targetInstructions) {
+
+        targetInstructions.textContent =
+            "ALIGNER LA VIGNETTE VIS (EX: T5061254)";
+
+    }
+
+    startScanner();
+
+}
+
+
+function initWorkflowScanNOM() {
+
+    currentScanTargetMode =
+        "NOM";
+
+    if (scanStepIndicator) {
+
+        scanStepIndicator.textContent =
+            "ÉTAPE 2 : SCANNER LE QR CODE NOM / PRÉNOM";
+
+    }
+
+    if (targetInstructions) {
+
+        targetInstructions.textContent =
+            "ALIGNER LE QR CODE NOM PRÉNOM";
+
+    }
+
+    startScanner();
+
+}
+
+
+/* --- Piste vidéo active de la caméra (ou null) --- */
+function getActiveVideoTrack() {
+
+    try {
+
+        const video =
+            document.querySelector(
+                "#reader video"
+            );
+
+        if (
+            !video ||
+            !video.srcObject
+        ) {
+
+            return null;
+
+        }
+
+        const tracks =
+            video.srcObject.getVideoTracks();
+
+        return tracks && tracks[0]
+            ? tracks[0]
+            : null;
+
+    } catch (e) {
+
+        return null;
+
+    }
+
+}
+
+
+/* --- Mise à jour visuelle du bouton torche existant --- */
+function updateTorchButtonUI(on) {
+
+    const torchBtn =
+        document.getElementById(
+            "torchBtn"
+        );
+
+    if (!torchBtn) {
+
+        return;
+
+    }
+
+    torchBtn.classList.toggle(
+        "active",
+        on
+    );
+
+    const icon =
+        torchBtn.querySelector(
+            ".material-icons"
+        );
+
+    if (icon) {
+
+        icon.textContent =
+            on
+                ? "flash_on"
+                : "flash_off";
+
+    }
+
+}
+
+
+/* --- Activation AUTOMATIQUE de la torche ---
+   Appelée uniquement APRÈS que la caméra a démarré (start() résolu).
+   Séquence : flux prêt → capacité torche ? → activation.
+   Aucune erreur bloquante si la torche n'est pas supportée.
+   Quelques tentatives espacées (certains Android exposent la
+   capacité torche légèrement après le démarrage du flux). */
+async function enableTorchAutomatically(sessionId) {
+
+    // La torche ne s'allume que si l'utilisateur l'avait déjà activée
+    if (!isTorchOn) {
+
+        return;
+
+    }
+
+    const delays =
+        [0, 300, 700, 1200];
+
+    for (const delay of delays) {
+
+        if (delay) {
+
+            await new Promise(
+                resolve =>
+                    setTimeout(
+                        resolve,
+                        delay
+                    )
+            );
+
+        }
+
+        // Session terminée / scanner relancé : on abandonne
+        if (sessionId !== scannerSessionId) {
+
+            return;
+
+        }
+
+        try {
+
+            const track =
+                getActiveVideoTrack();
+
+            if (
+                !track ||
+                track.readyState !== "live"
+            ) {
+
+                continue;
+
+            }
+
+            const capabilities =
+                typeof track.getCapabilities === "function"
+                    ? track.getCapabilities()
+                    : null;
+
+            if (
+                !capabilities ||
+                !capabilities.torch
+            ) {
+
+                continue;
+
+            }
+
+            await track.applyConstraints({
+
+                advanced: [
+
+                    {
+                        torch: true
+                    }
+
+                ]
+
+            });
+
+            if (sessionId !== scannerSessionId) {
+
+                return;
+
+            }
+
+            isTorchOn =
+                true;
+
+            updateTorchButtonUI(
+                true
+            );
+
+            return;
+
+        } catch (e) {
+
+            // Torche non contrôlable : on continue sans bloquer le scanner
+
+        }
+
+    }
+
+    // Torche non supportée : l'état affiché reflète la réalité
+    if (sessionId === scannerSessionId) {
+
+        isTorchOn =
+            false;
+
+        updateTorchButtonUI(
+            false
+        );
+
+    }
+
+}
+
+
+/* --- Arrêt réel et propre (async) : torche OFF → stop caméra --- */
+async function stopScannerNow() {
+
+    const scanner =
+        html5QrcodeScanner;
+
+    html5QrcodeScanner =
+        null;
+
+    if (!scanner) {
+
+        return;
+
+    }
+
+    // TORCH OFF (avant l'arrêt de la caméra)
+    try {
+
+        const track =
+            getActiveVideoTrack();
+
+        if (
+            track &&
+            track.readyState === "live"
+        ) {
+
+            await track.applyConstraints({
+
+                advanced: [
+
+                    {
+                        torch: false
+                    }
+
+                ]
+
+            });
+
+        }
+
+    } catch (e) {}
+
+    // STOP CAMERA
+    try {
+
+        await scanner.stop();
+
+    } catch (e) {
+
+        // scanner déjà arrêté : aucune erreur bloquante
+
+    }
+
+    const reader =
+        document.getElementById(
+            "reader"
+        );
+
+    if (reader) {
+
+        reader.innerHTML =
+            "";
+
+    }
+
+}
+
+
+/* --- Démarrage réel de la caméra (async) --- */
+async function launchScanner(
+    sessionId,
+    mode
+) {
+
+    const readerEl =
+        document.getElementById(
+            "reader"
+        );
+
+    if (!readerEl) {
+
+        return;
+
+    }
+
+    // NOM PRÉNOM : lecture QR CODE uniquement
+    // VIS : configuration d'origine (inchangée)
+    const scanner =
+        mode === "NOM"
+            ? new Html5Qrcode(
+                "reader",
+                {
+                    formatsToSupport: [
+                        Html5QrcodeSupportedFormats.QR_CODE
+                    ],
+                    verbose: false
+                }
+            )
+            : new Html5Qrcode("reader");
+
+    html5QrcodeScanner =
+        scanner;
+
+    try {
+
+        await scanner.start(
+
+            {
+                facingMode: "environment"
+            },
+
+            {
+                fps: 25,
+
+                qrbox: (
+                    w,
+                    h
+                ) => ({
+
+                    width:
+                        w * 0.8,
+
+                    height:
+                        h * 0.8
+
+                })
+
+            },
+
+            text => {
+
+                // Callback d'une ancienne session : ignoré
+                if (sessionId !== scannerSessionId) {
+
+                    return;
+
+                }
+
+                handleCaptureEngine(
+                    text
+                        .trim()
+                        .toUpperCase()
+                );
+
+            },
+
+            () => {}
+
+        );
+
+    } catch (error) {
+
+        console.error(
+            "Erreur caméra :",
+            error
+        );
+
+        if (html5QrcodeScanner === scanner) {
+
+            html5QrcodeScanner =
+                null;
+
+        }
+
+        return;
+
+    }
+
+    // CAMERA STREAM READY → torche automatique (sans bloquer le scan)
+    if (sessionId === scannerSessionId) {
+
+        enableTorchAutomatically(
+            sessionId
+        ).catch(() => {});
+
+    }
+
+}
+
+
+function startScanner() {
+
+    // Invalide l'ancienne session et programme l'arrêt propre
+    stopScanner();
+
+    const sessionId =
+        scannerSessionId;
+
+    const mode =
+        currentScanTargetMode;
+
+    scanLocked =
+        false;
+
+    scannerOpChain =
+        scannerOpChain
+            .then(() => {
+
+                // Un stop/start plus récent a été demandé : on n'ouvre pas la caméra
+                if (sessionId !== scannerSessionId) {
+
+                    return;
+
+                }
+
+                return launchScanner(
+                    sessionId,
+                    mode
+                );
+
+            })
+            .catch(error => {
+
+                console.error(
+                    "Erreur scanner :",
+                    error
+                );
+
+            });
+
+}
+
+
+/* =====================================================================
+   13. ARRÊT SCANNER
+   Conserve la même signature synchrone : stopScanner()
+===================================================================== */
+  function stopScanner() {
+
+    // Invalide immédiatement tout callback de scan en cours
+    scannerSessionId++;
+
+    // L'état de la torche choisi par l'utilisateur est conservé
+    // (la torche physique est éteinte par stopScannerNow, puis
+    // rallumée à la réouverture uniquement si isTorchOn est vrai).
+    updateTorchButtonUI(
+        isTorchOn
+    );
+
+    scannerOpChain =
+        scannerOpChain
+            .then(() =>
+                stopScannerNow()
+            )
+            .catch(() => {});
+
+}
+
+
+/* =====================================================================
+   14. SON DE SCAN
+===================================================================== */
+
+function playBeep(
+    frequency,
+    duration
+) {
+
+    try {
+
+        const AudioContext =
+            window.AudioContext ||
+            window.webkitAudioContext;
+
+        const audioCtx =
+            new AudioContext();
+
+        const oscillator =
+            audioCtx.createOscillator();
+
+        const gainNode =
+            audioCtx.createGain();
+
+
+        oscillator.connect(
+            gainNode
+        );
+
+        gainNode.connect(
+            audioCtx.destination
+        );
+
+
+        oscillator.type =
+            "sine";
+
+        oscillator.frequency.value =
+            frequency;
+
+        gainNode.gain.setValueAtTime(
+            0.1,
+            audioCtx.currentTime
+        );
+
+
+        oscillator.start();
+
+        oscillator.stop(
+            audioCtx.currentTime +
+            duration / 1000
+        );
+
+    } catch (e) {
+
+        console.log(
+            "Audio non disponible"
+        );
+
+    }
+
+}
+
+
+/* =====================================================================
+   15. TRAITEMENT DU SCAN
+   MODIFIÉ (branche NOM uniquement) :
+   - décodage du contenu du QR CODE
+   - verrou anti-double lecture
+   La branche VIS est strictement inchangée.
+===================================================================== */
+
+/* --- Décodage du contenu du QR CODE NOM PRÉNOM ---
+   Le format attendu par l'application est inchangé :
+   une chaîne "NOM PRÉNOM" (lettres et espaces, majuscules).
+   Formats acceptés :
+     - texte simple      : DUPONT JEAN
+     - clé=valeur        : NOM=DUPONT;PRENOM=JEAN
+     - JSON              : {"nom":"DUPONT","prenom":"JEAN"}
+   Retourne "" si le contenu est invalide (rien n'est enregistré). */
+function extractNomPrenomFromQr(
+    rawText
+) {
+
+    const text =
+        String(rawText || "")
+            .trim();
+
+    if (!text) {
+
+        return "";
+
+    }
+
+    const normKey = k =>
+        String(k)
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .replace(/[^A-Za-z]/g, "")
+            .toUpperCase();
+
+    let nom = "";
+    let prenom = "";
+    let full = "";
+
+    if (text.startsWith("{")) {
+
+        // Format JSON
+        try {
+
+            const obj =
+                JSON.parse(text);
+
+            Object.keys(obj).forEach(k => {
+
+                const key =
+                    normKey(k);
+
+                if (key === "NOM") {
+
+                    nom =
+                        String(obj[k]);
+
+                } else if (key === "PRENOM") {
+
+                    prenom =
+                        String(obj[k]);
+
+                }
+
+            });
+
+        } catch (e) {
+
+            return "";
+
+        }
+
+    } else if (
+        /(^|[;|,&\n])\s*(NOM|PRENOM|PRÉNOM)\s*[=:]/.test(text)
+    ) {
+
+        // Format clé=valeur
+        text
+            .split(/[;|,&\n]+/)
+            .forEach(part => {
+
+                const sep =
+                    part.search(/[=:]/);
+
+                if (sep < 0) {
+
+                    return;
+
+                }
+
+                const key =
+                    normKey(
+                        part.slice(0, sep)
+                    );
+
+                const value =
+                    part
+                        .slice(sep + 1)
+                        .trim();
+
+                if (key === "NOM") {
+
+                    nom =
+                        value;
+
+                } else if (key === "PRENOM") {
+
+                    prenom =
+                        value;
+
+                }
+
+            });
+
+    } else {
+
+        // Texte simple : NOM PRÉNOM
+        full =
+            text;
+
+    }
+
+    const result =
+        (
+            full ||
+            [nom, prenom]
+                .filter(Boolean)
+                .join(" ")
+        )
+            .replace(/\s+/g, " ")
+            .trim()
+            .toUpperCase();
+
+    return (
+        result &&
+        REGEX_NOM.test(result)
+    )
+        ? result
+        : "";
+
+}
+
+
+/* --- Message temporaire si le QR est lu mais non reconnu --- */
+function notifyInvalidQr() {
+
+    if (
+        !targetInstructions ||
+        invalidQrTimer
+    ) {
+
+        return;
+
+    }
+
+    targetInstructions.textContent =
+        "QR CODE NON RECONNU";
+
+    invalidQrTimer =
+        setTimeout(
+            () => {
+
+                invalidQrTimer =
+                    null;
+
+                if (
+                    currentScanTargetMode === "NOM"
+                ) {
+
+                    targetInstructions.textContent =
+                        "ALIGNER LE QR CODE NOM PRÉNOM";
+
+                }
+
+            },
+            2000
+        );
+
+}
+
+
+function handleCaptureEngine(
+    scannedText
+) {
+
+    if (
+        currentScanTargetMode
+        === "VIS"
+    ) {
+
+        if (
+            REGEX_VIS.test(
+                scannedText
+            )
+        ) {
+
+            tempTargetVis =
+                scannedText;
+
+            playBeep(
+                1200,
+                80
+            );
+
+            stopScanner();
+
+            if (modalAutoVisValue) {
+
+                modalAutoVisValue.textContent =
+                    tempTargetVis;
+
+            }
+
+            if (modalAutoVis) {
+
+                modalAutoVis.classList.add(
+                    "active"
+                );
+
+            }
+
+        }
+
+    } else if (
+        currentScanTargetMode
+        === "NOM"
+    ) {
+
+        // Anti-double lecture : un seul traitement par QR code
+        if (scanLocked) {
+
+            return;
+
+        }
+
+        const nomPrenom =
+            extractNomPrenomFromQr(
+                scannedText
+            );
+
+        if (nomPrenom) {
+
+            scanLocked =
+                true;
+
+            playBeep(
+                1000,
+                100
+            );
+
+            setTimeout(
+                () => {
+
+                    playBeep(
+                        1500,
+                        150
+                    );
+
+                },
+                120
+            );
+
+
+            stopScanner();
+
+
+            commitFullEntry(
+                tempTargetVis,
+                nomPrenom
+            );
+
+        } else {
+
+            // QR détecté mais contenu invalide :
+            // rien n'est enregistré, le scanner reste actif
+            notifyInvalidQr();
+
+        }
+
+    }
+
+}
+
+
+/* =====================================================================
+   16. AUTHENTIFICATION
+===================================================================== */
+
+function buildFullOperatorId(
+    id,
+    equipeId
+) {
+
+    if (!id) {
+
+        return "";
+
+    }
+
+    return equipeId
+        ? `${id}/${equipeId}`
+        : id;
+
+}
+
+
+function setLoggedInUser(
+    userObj
+) {
+
+    currentUser = {
+
+        id:
+            userObj.id,
+
+        name:
+            `${userObj.nom || ""} ${userObj.prenom || ""}`
+                .trim() ||
+            userObj.id,
+
+        equipe:
+            userObj.equipe_id || "",
+
+        fullId:
+            buildFullOperatorId(
+                userObj.id,
+                userObj.equipe_id
+            )
+
+    };
+
+
+    const displayUser =
+        document.getElementById(
+            "displayUser"
+        );
+
+    const displayId =
+        document.getElementById(
+            "displayId"
+        );
+
+
+    if (displayUser) {
+
+        displayUser.textContent =
+            currentUser.name;
+
+    }
+
+    if (displayId) {
+
+        displayId.textContent =
+            currentUser.fullId;
+
+    }
+
+}
+
+
+function persistSession(
+    userObj
+) {
+
+    localStorage.setItem(
+        "StellantisUser",
+
+        JSON.stringify({
+
+            id:
+                userObj.id,
+
+            nom:
+                userObj.nom,
+
+            prenom:
+                userObj.prenom,
+
+            equipe_id:
+                userObj.equipe_id || ""
+
+        })
+
+    );
+
+}
+
+
+function cacheUserForOffline(
+    id,
+    pass,
+    userObj
+) {
+
+    let cachedUsers = [];
+
+
+    try {
+
+        cachedUsers =
+            JSON.parse(
+                localStorage.getItem(
+                    "StellantisUsers_cache"
+                ) || "[]"
+            );
+
+    } catch (e) {
+
+        cachedUsers = [];
+
+    }
+
+
+    cachedUsers =
+        cachedUsers.filter(
+            user =>
+                user.id !== id
+        );
+
+
+    cachedUsers.push({
+
+        id,
+
+        pass,
+
+        nom:
+            userObj.nom,
+
+        prenom:
+            userObj.prenom,
+
+        equipe_id:
+            userObj.equipe_id || ""
+
+    });
+
+
+    localStorage.setItem(
+
+        "StellantisUsers_cache",
+
+        JSON.stringify(
+            cachedUsers
+        )
+
+    );
+
+}
+
+
+/* =====================================================================
+   17. CONNEXION
+===================================================================== */
+
+document
+    .getElementById("loginForm")
+    ?.addEventListener(
+        "submit",
+        async e => {
+
+            e.preventDefault();
+
+
+            const id =
+                document
+                    .getElementById(
+                        "loginId"
+                    )
+                    .value
+                    .trim()
+                    .toUpperCase();
+
+
+            const pass =
+                document
+                    .getElementById(
+                        "loginPass"
+                    )
+                    .value;
+
+
+            if (!id || !pass) {
+
+                alert(
+                    "REMPLIR TOUS LES CHAMPS"
+                );
+
+                return;
+
+            }
+
+
+            if (!navigator.onLine) {
+
+                let cachedUsers = [];
+
+
+                try {
+
+                    cachedUsers =
+                        JSON.parse(
+                            localStorage.getItem(
+                                "StellantisUsers_cache"
+                            ) || "[]"
+                        );
+
+                } catch (e) {}
+
+
+                const found =
+                    cachedUsers.find(
+                        u =>
+                            u.id === id &&
+                            u.pass === pass
+                    );
+
+
+                if (found) {
+
+                    persistSession(
+                        found
+                    );
+
+                    setLoggedInUser(
+                        found
+                    );
+
+                    showView(
+                        "logs-view"
+                    );
+
+                } else {
+
+                    alert(
+                        "IDENTIFIANTS INCORRECTS (HORS-LIGNE)."
+                    );
+
+                }
+
+                return;
+
+            }
+
+
+            if (!supabaseClient) {
+
+                alert(
+                    "CONNEXION SUPABASE INDISPONIBLE."
+                );
+
+                return;
+
+            }
+
+
+            try {
+
+                const {
+                    data,
+                    error
+                } =
+                    await supabaseClient
+
+                        .from(
+                            SUPABASE_USERS_TABLE
+                        )
+
+                        .select("*")
+
+                        .eq(
+                            "id",
+                            id
+                        )
+
+                        .eq(
+                            "pass",
+                            pass
+                        )
+
+                        .eq(
+                            "statut",
+                            "ACTIVE"
+                        )
+
+                        .maybeSingle();
+
+
+                if (
+                    error ||
+                    !data
+                ) {
+
+                    alert(
+                        "IDENTIFIANTS INVALIDES OU COMPTE BLOQUÉ."
+                    );
+
+                    return;
+
+                }
+cacheUserForOffline(
+                    id,
+                    pass,
+                    data
+                );
+
+
+                persistSession(
+                    data
+                );
+
+
+                setLoggedInUser(
+                    data
+                );
+
+
+                showView(
+                    "logs-view"
+                );
+
+
+                await loadUserRecordsFromSupabase();
+
+
+            } catch (err) {
+
+                console.error(
+                    err
+                );
+
+                alert(
+                    "ERREUR RÉSEAU OU SERVEUR SUPABASE."
+                );
+
+            }
+
+        }
+    );
+
+
+/* =====================================================================
+   18. INSCRIPTION
+===================================================================== */
+  document
+    .getElementById("registerForm")
+    ?.addEventListener(
+        "submit",
+        async e => {
+
+            e.preventDefault();
+
+
+            const nom =
+                document
+                    .getElementById(
+                        "regNom"
+                    )
+                    .value
+                    .trim()
+                    .toUpperCase();
+
+
+            const prenom =
+                document
+                    .getElementById(
+                        "regPrenom"
+                    )
+                    .value
+                    .trim()
+                    .toUpperCase();
+
+
+            const matricule =
+                document
+                    .getElementById(
+                        "regId"
+                    )
+                    .value
+                    .trim()
+                    .toUpperCase();
+
+
+            const equipeLabel =
+                document
+                    .getElementById(
+                        "regEquipe"
+                    )
+                    .value;
+
+
+            const pass =
+                document
+                    .getElementById(
+                        "regPass"
+                    )
+                    .value;
+
+
+            if (
+                !nom ||
+                !prenom ||
+                !matricule ||
+                !pass
+            ) {
+
+                alert(
+                    "CHAMPS OBLIGATOIRES"
+                );
+
+                return;
+
+            }
+
+
+            if (!equipeLabel) {
+
+                alert(
+                    "SÉLECTIONNER UNE ÉQUIPE"
+                );
+
+                return;
+
+            }
+
+
+            if (!navigator.onLine) {
+
+                alert(
+                    "CONNEXION INTERNET REQUISE POUR CRÉER UN COMPTE."
+                );
+
+                return;
+
+            }
+
+
+            const equipeId =
+                TEAM_EQUIPE_ID_MAP[
+                    equipeLabel
+                ] ||
+                equipeLabel;
+
+
+            try {
+
+                const {
+                    data: existingUser,
+                    error: checkError
+                } =
+                    await supabaseClient
+
+                        .from(
+                            SUPABASE_USERS_TABLE
+                        )
+
+                        .select(
+                            "id"
+                        )
+
+                        .eq(
+                            "id",
+                            matricule
+                        )
+
+                        .maybeSingle();
+
+
+                if (checkError) {
+
+                    throw checkError;
+
+                }
+
+
+                if (existingUser) {
+
+                    alert(
+                        "ID MATRICULE EXISTE DÉJÀ."
+                    );
+
+                    return;
+
+                }
+
+
+                const newUser = {
+
+                    id:
+                        matricule,
+
+                    nom,
+
+                    prenom,
+
+                    pass,
+
+                    equipe_id:
+                        equipeId,
+
+                    statut:
+                        "ACTIVE"
+
+                };
+
+
+                const {
+                    error
+                } =
+                    await supabaseClient
+
+                        .from(
+                            SUPABASE_USERS_TABLE
+                        )
+
+                        .insert([
+                            newUser
+                        ]);
+
+
+                if (error) {
+
+                    throw error;
+
+                }
+
+
+                alert(
+                    "COMPTE CRÉÉ AVEC SUCCÈS !"
+                );
+
+
+                cacheUserForOffline(
+                    matricule,
+                    pass,
+                    newUser
+                );
+
+
+                persistSession(
+                    newUser
+                );
+
+
+                setLoggedInUser(
+                    newUser
+                );
+
+
+                showView(
+                    "logs-view"
+                );
+
+
+            } catch (err) {
+
+                console.error(
+                    "Erreur inscription :",
+                    err
+                );
+
+                alert(
+                    "ERREUR SERVEUR : IMPOSSIBLE DE CRÉER LE COMPTE."
+                );
+
+            }
+
+        }
+    );
+
+
+/* =====================================================================
+   19. MOT DE PASSE OUBLIÉ
+   CORRECTION :
+   SCAN_MGV_USERS et non SCAN_MGV_USRES
+===================================================================== */
+document
+    .getElementById("forgotForm")
+    ?.addEventListener(
+        "submit",
+        async e => {
+
+            e.preventDefault();
+
+
+            const id =
+                document
+                    .getElementById(
+                        "forgotId"
+                    )
+                    .value
+                    .trim()
+                    .toUpperCase();
+
+
+            const newPass =
+                document
+                    .getElementById(
+                        "forgotPass"
+                    )
+                    .value;
+
+
+            if (!id || !newPass) {
+
+                alert(
+                    "REMPLIR TOUS LES CHAMPS"
+                );
+
+                return;
+
+            }
+
+
+            if (!navigator.onLine) {
+
+                alert(
+                    "CONNEXION INTERNET REQUISE."
+                );
+
+                return;
+
+            }
+
+
+            try {
+
+                const {
+                    data: existingUser,
+                    error: findError
+                } =
+                    await supabaseClient
+
+                        .from(
+                            SUPABASE_USERS_TABLE
+                        )
+
+                        .select(
+                            "id"
+                        )
+
+                        .eq(
+                            "id",
+                            id
+                        )
+
+                        .maybeSingle();
+
+
+                if (findError) {
+
+                    throw findError;
+
+                }
+
+
+                if (!existingUser) {
+
+                    alert(
+                        "ID MATRICULE INTROUVABLE."
+                    );
+
+                    return;
+
+                }
+
+
+                const {
+                    error
+                } =
+                    await supabaseClient
+
+                        .from(
+                            SUPABASE_USERS_TABLE
+                        )
+
+                        .update({
+
+                            pass:
+                                newPass
+
+                        })
+
+                        .eq(
+                            "id",
+                            id
+                        );
+
+
+                if (error) {
+
+                    throw error;
+
+                }
+
+
+                alert(
+                    "MOT DE PASSE MIS À JOUR."
+                );
+
+
+                showView(
+                    "login-view"
+                );
+
+
+            } catch (err) {
+
+                console.error(
+                    err
+                );
+
+                alert(
+                    "ERREUR SERVEUR : IMPOSSIBLE DE METTRE À JOUR LE MOT DE PASSE."
+                );
+
+            }
+
+        }
+    );
+
+
+/* =====================================================================
+   20. RESTAURATION SESSION
+===================================================================== */
+function restoreSessionIfAny() {
+
+    try {
+
+        const saved =
+            JSON.parse(
+                localStorage.getItem(
+                    "StellantisUser"
+                )
+            );
+
+
+        if (
+            saved &&
+            saved.id
+        ) {
+
+            setLoggedInUser(
+                saved
+            );
+
+            showView(
+                "logs-view"
+            );
+
+            return true;
+
+        }
+
+    } catch (e) {}
+
+
+    return false;
+
+}
+
+
+/* =====================================================================
+   21. DÉCONNEXION
+===================================================================== */
+
+document
+    .getElementById("logoutBtn")
+    ?.addEventListener(
+        "click",
+        () => {
+
+            if (
+                !confirm(
+                    "VOULEZ-VOUS VOUS DÉCONNECTER ?"
+                )
+            ) {
+
+                return;
+
+            }
+
+
+            stopScanner();
+
+
+            localStorage.removeItem(
+                "StellantisUser"
+            );
+
+
+            currentUser =
+                null;
+
+
+            const displayUser =
+                document.getElementById(
+                    "displayUser"
+                );
+
+
+            const displayId =
+                document.getElementById(
+                    "displayId"
+                );
+
+
+            if (displayUser)
+                displayUser.textContent =
+                    "-";
+
+
+            if (displayId)
+                displayId.textContent =
+                    "-";
+
+
+            showView(
+                "login-view"
+            );
+
+        }
+    );
+
+
+/* =====================================================================
+   22. CRÉATION D'UN ENREGISTREMENT LOCAL
+===================================================================== */
+
+function commitFullEntry(
+    vis,
+    nom
+) {
+
+    const d =
+        new Date();
+
+
+    const dateStr =
+        d.toISOString()
+            .slice(
+                0,
+                10
+            );
+
+
+    const heureStr =
+        d.toTimeString()
+            .slice(
+                0,
+                5
+            );
+
+
+    const record = {
+
+        id:
+            genId(),
+
+        operator_id:
+            currentUser
+                ? currentUser.id
+                : "",
+
+        equipe_id:
+            currentUser
+                ? currentUser.equipe
+                : "",
+
+        code:
+            vis,
+
+        nom:
+            nom,
+
+        date:
+            dateStr,
+
+        time:
+            heureStr,
+
+        timestamp:
+            d.getTime(),
+
+        sync:
+            false
+
+    };
+
+
+    logs.unshift(
+        record
+    );
+
+
+    saveLogsToStorage();
+
+
+    renderTable();
+
+
+    showView(
+        "logs-view"
+    );
+
+
+    if (
+        navigator.onLine &&
+        isOnline
+    ) {
+
+        sendRecordToSupabase(
+            record
+        );
+
+    }
+
+}
+/* =====================================================================
+   23. SYNCHRONISATION SUPABASE
+   CORRECTION PRINCIPALE
+===================================================================== */
+
+async function sendRecordToSupabase(
+    record
+) {
+
+    if (!supabaseClient) {
+
+        console.error(
+            "Client Supabase indisponible."
+        );
+
+        return false;
+
+    }
+
+
+    if (!navigator.onLine) {
+
+        return false;
+
+    }
+
+
+    try {
+
+        const payload = {
+
+            id:
+                Number(record.id),
+
+            operator_id:
+                record.operator_id ||
+                "",
+
+            equipe_id:
+                record.equipe_id ||
+                null,
+
+            code:
+                record.code ||
+                "",
+
+            nom:
+                record.nom ||
+                "",
+
+            date:
+                record.date ||
+                "",
+
+            time:
+                record.time ||
+                ""
+
+        };
+
+
+        console.log(
+            "[SCANNER_APP] Envoi Supabase :",
+            payload
+        );
+
+
+        const {
+            error
+        } =
+            await supabaseClient
+
+                .from(
+                    SUPABASE_TABLE
+                )
+
+                .upsert(
+                    payload,
+                    {
+                        onConflict:
+                            "id"
+                    }
+                );
+
+
+        if (error) {
+
+            console.error(
+                "[SCANNER_APP] ERREUR SUPABASE :",
+                error
+            );
+
+            record.sync =
+                false;
+
+            saveLogsToStorage();
+
+            renderTable(
+                dynamicSearchInput
+                    ? dynamicSearchInput.value
+                    : ""
+            );
+
+            return false;
+
+        }
+
+
+        record.sync =
+            true;
+
+
+        saveLogsToStorage();
+
+
+        renderTable(
+            dynamicSearchInput
+                ? dynamicSearchInput.value
+                : ""
+        );
+
+
+        triggerSuccessToast();
+
+
+        const lastSyncTime =
+            document.getElementById(
+                "lastSyncTime"
+            );
+
+
+        if (lastSyncTime) {
+
+            lastSyncTime.textContent =
+                new Date()
+                    .toLocaleTimeString();
+
+        }
+
+
+        console.log(
+            "[SCANNER_APP] Synchronisation Supabase réussie :",
+            record.id
+        );
+
+
+        return true;
+
+
+    } catch (err) {
+
+        console.error(
+            "[SCANNER_APP] Exception synchronisation :",
+            err
+        );
+
+
+        record.sync =
+            false;
+
+
+        saveLogsToStorage();
+
+
+        return false;
+
+    }
+
+}
+
+
+/* =====================================================================
+   24. SYNCHRONISATION DES DONNÉES EN ATTENTE
+===================================================================== */
+ /* =====================================================================
+   24. SYNCHRONISATION DES DONNÉES EN ATTENTE
+===================================================================== */
+  lol--------
+
+
+    let successCount =
+        0;
+
+
+    for (
+        const record
+        of pendingRecords
+    ) {
+
+        const success =
+            await sendRecordToSupabase(
+                record
+            );
+
+
+        if (success) {
+
+            successCount++;
+
+        }
+
+    }
+
+
+    if (syncIcon) {
+
+        setTimeout(
+            () => {
+
+                syncIcon.classList.remove(
+                    "sync-rotating"
+                );
+
+            },
+            1000
+        );
+
+    }
+
+
+    if (
+        showEmptyAlert
+    ) {
+
+        alert(
+            `Synchronisation terminée : ${successCount}/${pendingRecords.length} donnée(s).`
+        );
+
+    }
+
+}
+/* =====================================================================
+   25. CHARGEMENT DES DONNÉES DE L'OPÉRATEUR DEPUIS SUPABASE
+===================================================================== */
+
+async function loadUserRecordsFromSupabase() {
+
+    if (
+        !supabaseClient ||
+        !navigator.onLine
+    ) {
+
+        return;
+
+    }
+
+
+    if (!currentUser) {
+
+        return;
+
+    }
+
+
+    try {
+
+        const {
+            data,
+            error
+        } =
+            await supabaseClient
+
+                .from(
+                    SUPABASE_TABLE
+                )
+
+                .select("*")
+
+                .eq(
+                    "operator_id",
+                    currentUser.id
+                )
+
+                .order(
+                    "id",
+                    {
+                        ascending:
+                            false
+                    }
+                );
+
+
+        if (error) {
+
+            console.error(
+                "[SCANNER_APP] Erreur chargement Supabase :",
+                error
+            );
+
+            return;
+
+        }
+
+
+        if (!data) {
+
+            return;
+
+        }
+
+
+        const localPending =
+            logs.filter(
+                log =>
+                    !log.sync
+            );
+
+
+        const serverRecords =
+            data.map(
+                row => ({
+
+                    id:
+                        Number(row.id),
+
+                    operator_id:
+                        row.operator_id ||
+                        "",
+
+                    equipe_id:
+                        row.equipe_id ||
+                        "",
+
+                    code:
+                        row.code ||
+                        "",
+
+                    nom:
+                        row.nom ||
+                        "",
+
+                    date:
+                        row.date ||
+                        "",
+
+                    time:
+                        row.time ||
+                        "",
+
+                    timestamp:
+                        row.created_at
+                            ? new Date(
+                                row.created_at
+                            ).getTime()
+                            : Number(row.id),
+
+                    sync:
+                        true
+
+                })
+            );
+
+
+        const serverIds =
+            new Set(
+                serverRecords.map(
+                    r =>
+                        Number(r.id)
+                )
+            );
+
+
+        const pendingNotOnServer =
+            localPending.filter(
+                local =>
+                    !serverIds.has(
+                        Number(local.id)
+                    )
+            );
+
+
+        logs =
+            [
+                ...pendingNotOnServer,
+                ...serverRecords
+            ];
+
+
+        logs.sort(
+            (
+                a,
+                b
+            ) =>
+                Number(b.id) -
+                Number(a.id)
+        );
+
+
+        saveLogsToStorage();
+
+
+        renderTable();
+
+
+        console.log(
+            `[SCANNER_APP] ${serverRecords.length} donnée(s) récupérée(s) depuis Supabase.`
+        );
+
+
+    } catch (err) {
+
+        console.error(
+            "[SCANNER_APP] Erreur récupération :",
+            err
+        );
+
+    }
+
+}
+
+
+/* =====================================================================
+   26. SUPPRESSION D'UNE DONNÉE
+===================================================================== */
+async function deleteRecordFromSupabase(
+    record
+) {
+
+    if (
+        !navigator.onLine ||
+        !supabaseClient
+    ) {
+
+        return;
+
+    }
+
+
+    try {
+
+        const {
+            error
+        } =
+            await supabaseClient
+
+                .from(
+                    SUPABASE_TABLE
+                )
+
+                .delete()
+
+                .eq(
+                    "id",
+                    Number(record.id)
+                );
+
+
+        if (error) {
+
+            console.error(
+                "[SCANNER_APP] Erreur suppression Supabase :",
+                error
+            );
+
+        }
+
+    } catch (err) {
+
+        console.error(
+            err
+        );
+
+    }
+
+}
+
+
+/* =====================================================================
+   27. RENDU TABLEAU
+===================================================================== */
+
+function renderTable(
+    filterQuery = ""
+) {
+
+    if (!logGridBody) {
+
+        return;
+
+    }
+
+
+    logGridBody.innerHTML =
+        "";
+
+
+    const query =
+        filterQuery
+            .toUpperCase()
+            .trim();
+
+
+    logs.forEach(
+        (
+            log,
+            index
+        ) => {
+
+
+            const searchableText = [
+
+                log.operator_id,
+
+                log.equipe_id,
+
+                log.code,
+
+                log.nom,
+
+                log.date,
+
+                log.time
+
+            ]
+                .filter(Boolean)
+                .join(" ")
+                .toUpperCase();
+
+
+            const isMatched =
+                query !== "" &&
+                searchableText.includes(
+                    query
+                );
+
+
+            const row =
+                document.createElement(
+                    "div"
+                );
+
+
+            row.className =
+                isMatched
+                    ? "grid-row highlight-match"
+                    : "grid-row";
+
+
+            const displayOperator =
+                log.operator_id
+                    ? `${log.operator_id}${log.equipe_id ? "/" + log.equipe_id : ""}`
+                    : "";
+
+
+            row.innerHTML = `
+
+                <div class="grid-cell col-op">${displayOperator}</div>
+
+                <div class="grid-cell col-vis">${log.code || ""}</div>
+
+                <div class="grid-cell col-nom">${log.nom || ""}</div>
+
+                <div class="grid-cell col-dh">
+                    <span class="dh-date">${log.date || ""}</span>
+                    <span class="dh-time">${log.time || ""}</span>
+                    <span class="status-sync ${log.sync ? "ok" : "pending"}">${log.sync ? "ENVOYÉ ✓" : "EN ATTENTE"}</span>
+                </div>
+
+                <div class="grid-cell col-act">
+                    <button class="btn-delete" data-index="${index}">
+                        <span class="material-icons" style="font-size:24px;">delete</span>
+                    </button>
+                </div>
+
+            `;
+
+
+            logGridBody.appendChild(
+                row
+            );
+
+        }
+    );
+
+
+    document
+        .querySelectorAll(
+            ".btn-delete"
+        )
+        .forEach(
+            btn => {
+
+                btn.addEventListener(
+                    "click",
+                    async e => {
+
+                        const idx =
+                            Number(
+                                e.target
+                                    .closest(
+                                        ".btn-delete"
+                                    )
+                                    .getAttribute(
+                                        "data-index"
+                                    )
+                            );
+
+
+                        const record =
+                            logs[idx];
+
+
+                        if (!record) {
+
+                            return;
+
+                        }
+
+
+                        if (
+                            !confirm(
+                                "SUPPRIMER CETTE ENTRÉE ?"
+                            )
+                        ) {
+
+                            return;
+
+                        }
+
+
+                        logs.splice(
+                            idx,
+                            1
+                        );
+
+
+                        saveLogsToStorage();
+
+
+                        renderTable(
+                            dynamicSearchInput
+                                ? dynamicSearchInput.value
+                                : ""
+                        );
+
+
+                        if (
+                            record.sync
+                        ) {
+
+                            await deleteRecordFromSupabase(
+                                record
+                            );
+
+                        }
+
+                    }
+                );
+
+            }
+        );
+
+}
+
+
+/* =====================================================================
+   28. STATUT RÉSEAU
+===================================================================== */
+function updateNetworkStatus() {
+
+    const badge =
+        document.getElementById(
+            "networkStatus"
+        );
+
+
+    isOnline =
+        navigator.onLine;
+
+
+    if (!badge) {
+
+        return;
+
+    }
+
+
+    if (isOnline) {
+
+        badge.className =
+            "badge online";
+
+        badge.textContent =
+            "EN LIGNE";
+
+    } else {
+
+        badge.className =
+            "badge offline";
+
+        badge.textContent =
+            "HORS LIGNE";
+
+    }
+
+}
+
+
+window.addEventListener(
+    "online",
+    async () => {
+
+        updateNetworkStatus();
+
+
+        await syncPendingRecords(
+            false
+        );
+
+
+        if (currentUser) {
+
+            await loadUserRecordsFromSupabase();
+
+        }
+
+    }
+);
+
+
+window.addEventListener(
+    "offline",
+    () => {
+
+        updateNetworkStatus();
+
+    }
+);
+
+
+/* =====================================================================
+   29. BOUTON ACTUALISER
+===================================================================== */
+
+document
+    .getElementById(
+        "refreshBtn"
+    )
+    ?.addEventListener(
+        "click",
+        async function() {
+
+            updateNetworkStatus();
+
+
+            if (!isOnline) {
+
+                alert(
+                    "CONNEXION INTERNET INDISPONIBLE."
+                );
+
+                return;
+
+            }
+
+
+            await syncPendingRecords(
+                false
+            );
+
+
+            await loadUserRecordsFromSupabase();
+
+
+            alert(
+                "DONNÉES ACTUALISÉES ET SYNCHRONISÉES."
+            );
+
+        }
+    );
+
+
+/* =====================================================================
+   30. TOAST SUCCÈS
+===================================================================== */
+
+function triggerSuccessToast() {
+
+    if (!toastSuccess) {
+
+        return;
+
+    }
+
+
+    toastSuccess.classList.add(
+        "show"
+    );
+
+
+    setTimeout(
+        () => {
+
+            toastSuccess.classList.remove(
+                "show"
+            );
+
+        },
+        3000
+    );
+
+}
+
+
+/* =====================================================================
+   31. RECHERCHE
+===================================================================== */
+
+document
+    .getElementById(
+        "openSearchBtn"
+    )
+    ?.addEventListener(
+        "click",
+        () => {
+
+            if (!searchSlidingBar) {
+
+                return;
+
+            }
+
+
+            searchSlidingBar.classList.toggle(
+                "open"
+            );
+
+
+            if (
+                searchSlidingBar.classList.contains(
+                    "open"
+                )
+            ) {
+
+                if (dynamicSearchInput) {
+
+                    dynamicSearchInput.value =
+                        "";
+
+                    setTimeout(
+                        () => {
+
+                            dynamicSearchInput.focus();
+
+                        },
+                        100
+                    );
+
+                }
+
+            } else {
+
+                renderTable(
+                    ""
+                );
+
+            }
+
+        }
+    );
+
+
+dynamicSearchInput
+    ?.addEventListener(
+        "input",
+        function() {
+
+            this.value =
+                this.value.toUpperCase();
+
+
+            renderTable(
+                this.value
+            );
+
+        }
+    );
+
+
+/* =====================================================================
+   32. MAJ AUTOMATIQUE EN MAJUSCULE
+===================================================================== */
+document
+    .querySelectorAll(
+        "input"
+    )
+    .forEach(
+        input => {
+
+            input.addEventListener(
+                "input",
+                function() {
+
+                    this.value =
+                        this.value.toUpperCase();
+
+                }
+            );
+
+        }
+    );
+
+
+/* =====================================================================
+   33. FLASH
+===================================================================== */
+
+document
+    .getElementById(
+        "torchBtn"
+    )
+    ?.addEventListener(
+        "click",
+        async () => {
+
+            try {
+
+                const video =
+                    document.querySelector(
+                        "#reader video"
+                    );
+
+
+                if (
+                    !video ||
+                    !video.srcObject
+                ) {
+
+                    return;
+
+                }
+
+
+                const track =
+                    video
+                        .srcObject
+                        .getVideoTracks()[0];
+
+
+                if (!track) {
+
+                    return;
+
+                }
+
+
+                const capabilities =
+                    track.getCapabilities();
+
+
+                if (
+                    !capabilities ||
+                    !capabilities.torch
+                ) {
+
+                    alert(
+                        "FLASH NON DISPONIBLE"
+                    );
+
+                    return;
+
+                }
+
+
+                isTorchOn =
+                    !isTorchOn;
+
+
+                await track.applyConstraints({
+
+                    advanced: [
+
+                        {
+                            torch:
+                                isTorchOn
+                        }
+
+                    ]
+
+                });
+
+
+                const torchBtn =
+                    document.getElementById(
+                        "torchBtn"
+                    );
+
+
+                if (torchBtn) {
+
+                    torchBtn.classList.toggle(
+                        "active",
+                        isTorchOn
+                    );
+
+
+                    const icon =
+                        torchBtn.querySelector(
+                            ".material-icons"
+                        );
+
+
+                    if (icon) {
+
+                        icon.textContent =
+                            isTorchOn
+                                ? "flash_on"
+                                : "flash_off";
+
+                    }
+
+                }
+
+
+            } catch (e) {
+
+                console.error(
+                    "Erreur flash :",
+                    e
+                );
+
+            }
+
+        }
+    );
+
+
+/* =====================================================================
+   34. EXPORT CSV
+===================================================================== */
+  document
+    .getElementById(
+        "exportCsvBtn"
+    )
+    ?.addEventListener(
+        "click",
+        () => {
+
+            if (
+                logs.length === 0
+            ) {
+
+                alert(
+                    "AUCUNE DONNÉE À EXPORTER."
+                );
+
+                return;
+
+            }
+
+
+            let csv =
+                "\uFEFFOP;ÉQUIPE;CODE VIS;NOM / PRÉNOM;DATE;HEURE;STATUT\n";
+
+
+            logs.forEach(
+                log => {
+
+                    csv +=
+
+                        `${log.operator_id || ""};` +
+
+                        `${log.equipe_id || ""};` +
+
+                        `${log.code || ""};` +
+
+                        `${log.nom || ""};` +
+
+                        `${log.date || ""};` +
+
+                        `${log.time || ""};` +
+
+                        `${log.sync ? "ENVOYÉ" : "ATTENTE"}\n`;
+
+                }
+            );
+
+
+            const blob =
+                new Blob(
+                    [csv],
+                    {
+                        type:
+                            "text/csv;charset=utf-8;"
+                    }
+                );
+
+
+            const a =
+                document.createElement(
+                    "a"
+                );
+
+
+            a.href =
+                URL.createObjectURL(
+                    blob
+                );
+
+
+            a.download =
+                `MGV_EXPORT_${new Date().toISOString().slice(0,10)}.CSV`;
+
+
+            document.body.appendChild(
+                a
+            );
+
+
+            a.click();
+
+
+            document.body.removeChild(
+                a
+            );
+
+        }
+    );
+
+
+/* =====================================================================
+   35. MODAL VIS AUTOMATIQUE
+===================================================================== */
+document
+    .getElementById(
+        "submitAutoVisBtn"
+    )
+    ?.addEventListener(
+        "click",
+        () => {
+
+            if (modalAutoVis) {
+
+                modalAutoVis.classList.remove(
+                    "active"
+                );
+
+            }
+
+            initWorkflowScanNOM();
+
+        }
+    );
+
+
+document
+    .getElementById(
+        "cancelAutoVisBtn"
+    )
+    ?.addEventListener(
+        "click",
+        () => {
+
+            if (modalAutoVis) {
+
+                modalAutoVis.classList.remove(
+                    "active"
+                );
+
+            }
+
+            initWorkflowScanVIS();
+
+        }
+    );
+
+
+/* =====================================================================
+   36. NAVIGATION AUTHENTIFICATION
+===================================================================== */
+
+document
+    .getElementById(
+        "toRegister"
+    )
+    ?.addEventListener(
+        "click",
+        () =>
+            showView(
+                "register-view"
+            )
+    );
+
+
+document
+    .getElementById(
+        "toForgot"
+    )
+    ?.addEventListener(
+        "click",
+        () =>
+            showView(
+                "forgot-view"
+            )
+    );
+
+
+document
+    .querySelectorAll(
+        ".toLogin"
+    )
+    .forEach(
+        btn => {
+
+            btn.addEventListener(
+                "click",
+                () =>
+                    showView(
+                        "login-view"
+                    )
+            );
+
+        }
+    );
+
+
+/* =====================================================================
+   37. SAISIE MANUELLE VIS
+===================================================================== */
+
+document
+    .getElementById(
+        "openManualModal"
+    )
+    ?.addEventListener(
+        "click",
+        () => {
+
+            inputVisCode.value =
+                "";
+
+            inputNomPrenom.value =
+                "";
+
+            tempTargetVis =
+                "";
+
+
+            modalSaisieVis.classList.add(
+                "active"
+            );
+
+
+            setTimeout(
+                () =>
+                    inputVisCode.focus(),
+                100
+            );
+
+        }
+    );
+
+
+document
+    .getElementById(
+        "submitVisBtn"
+    )
+    ?.addEventListener(
+        "click",
+        () => {
+
+            const valVis =
+                inputVisCode.value
+                    .trim()
+                    .toUpperCase();
+
+
+            if (
+                REGEX_VIS.test(
+                    valVis
+                )
+            ) {
+
+                tempTargetVis =
+                    valVis;
+
+
+                modalSaisieVis.classList.remove(
+                    "active"
+                );
+
+
+                modalSaisieNom.classList.add(
+                    "active"
+                );
+
+
+                setTimeout(
+                    () =>
+                        inputNomPrenom.focus(),
+                    100
+                );
+
+            } else {
+
+                alert(
+                    "CODE VIS INCORRECT."
+                );
+
+            }
+
+        }
+    );
+
+
+document
+    .getElementById(
+        "cancelVisBtn"
+    )
+    ?.addEventListener(
+        "click",
+        () => {
+
+            modalSaisieVis.classList.remove(
+                "active"
+            );
+
+        }
+    );
+
+
+document
+    .getElementById(
+        "submitNomBtn"
+    )
+    ?.addEventListener(
+        "click",
+        () => {
+
+            const valNom =
+                inputNomPrenom.value
+                    .trim()
+                    .toUpperCase();
+
+
+            if (
+                REGEX_NOM.test(
+                    valNom
+                )
+            ) {
+
+                modalSaisieNom.classList.remove(
+                    "active"
+                );
+
+
+                commitFullEntry(
+                    tempTargetVis,
+                    valNom
+                );
+
+            } else {
+
+                alert(
+                    "FORMAT NOM REQUIS : LETTRES SEULEMENT."
+                );
+
+            }
+
+        }
+    );
+
+
+document
+    .getElementById(
+        "scanNomModeBtn"
+    )
+    ?.addEventListener(
+        "click",
+        () => {
+
+            modalSaisieNom.classList.remove(
+                "active"
+            );
+
+
+            showView(
+                "scanner-view"
+            );
+
+
+            initWorkflowScanNOM();
+
+        }
+    );
+
+
+/* =====================================================================
+   38. INITIALISATION FINALE
+===================================================================== */
+
+initializeData();
+
+updateNetworkStatus();
+
+
+if (
+    !restoreSessionIfAny()
+) {
+
+    showView(
+        "login-view"
+    );
+
+} else {
+
+    // Chargement des données Supabase
+    // après restauration de la session.
+
+    if (
+        navigator.onLine
+    ) {
+
+        loadUserRecordsFromSupabase();
+
+    }
+
+}
+
+
+/* =====================================================================
+   FIN DU SCRIPT
+===================================================================== */
+</script>
+</body>
+</html>
+  
+    
+    /* NOM, PRÉNOM ET ID EN JAUNE DYNAMIQUE ET DESIGN */

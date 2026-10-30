@@ -4702,6 +4702,37 @@ if (
     }
 
 }
+    /* =====================================================================
+   ENREGISTREMENT DU SERVICE WORKER — SCAN-QR
+===================================================================== */
+
+if ("serviceWorker" in navigator) {
+    window.addEventListener("load", async () => {
+        try {
+            const registration =
+                await navigator.serviceWorker.register(
+                    "./service-worker.js",
+                    {
+                        scope: "./"
+                    }
+                );
+
+            console.log(
+                "[SCAN-QR] Service Worker enregistré :",
+                registration.scope
+            );
+
+            // Vérifier si une nouvelle version est disponible.
+            await registration.update();
+
+        } catch (error) {
+            console.error(
+                "[SCAN-QR] Échec de l'enregistrement du Service Worker :",
+                error
+            );
+        }
+    });
+    }
 
 
 /* =====================================================================

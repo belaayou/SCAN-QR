@@ -1,10 +1,10 @@
 // =====================================================================
-// SCAN MGV APP - Service Worker (hors ligne)
+// SCAN-QR APP - Service Worker (hors ligne)
 // Rôle : rendre l'APPLICATION (coque + librairies) disponible sans réseau.
 // Ne touche JAMAIS à Supabase (REST, Auth, Realtime) : aucune donnée métier en cache.
 // =====================================================================
-const CACHE_NAME = 'scan-mgv-app-v10';        // <- incrémenter (v2, v3...) à chaque publication
-const RUNTIME_CACHE = 'scan-mgv-runtime-v1'; // polices Google + copies CDN
+const CACHE_NAME = 'scan-qr-app-v10';        // <- incrémenter (v2, v3...) à chaque publication
+const RUNTIME_CACHE = 'scan-qr-runtime-v1'; // polices Google + copies CDN
 const OWN_CACHES = [CACHE_NAME, RUNTIME_CACHE];
 
 const abs = (p) => new URL(p, self.location).href;

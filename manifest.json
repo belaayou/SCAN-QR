@@ -1,26 +1,27 @@
 {
-  "name": "SCAN MGV Stellantis",
+  "id": "./index.html",
+  "name": "STELLANTIS MGV SCANNER",
   "short_name": "SCAN-QR",
-  "description": "Système de scan industriel Stellantis opérationnel hors-ligne",
+  "description": "Application industrielle de scan VIS et de gestion des enregistrements Stellantis MGV, avec prise en charge du mode hors ligne.",
+  "lang": "fr-FR",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#000000",
+  "background_color": "#131313",
   "theme_color": "#eaea00",
   "icons": [
     {
-      "src": "IMG_20260413_130653.png",
+      "src": "./IMG_20260413_130653.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "IMG_20260413_130653.png",
+      "src": "./IMG_20260413_130653.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
     }
-  ],
-  "lang": "fr-FR"
+  ]
 }

@@ -3,7 +3,7 @@
 // Rôle : rendre l'APPLICATION (coque + librairies) disponible sans réseau.
 // Ne touche JAMAIS à Supabase (REST, Auth, Realtime) : aucune donnée métier en cache.
 // =====================================================================
-const CACHE_NAME = 'scan-mgv-app-v6';        // <- incrémenter (v2, v3...) à chaque publication
+const CACHE_NAME = 'scan-mgv-app-v10';        // <- incrémenter (v2, v3...) à chaque publication
 const RUNTIME_CACHE = 'scan-mgv-runtime-v1'; // polices Google + copies CDN
 const OWN_CACHES = [CACHE_NAME, RUNTIME_CACHE];
 
@@ -57,7 +57,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
     await Promise.all(
-      keys.filter((k) => k.startsWith('scan-mgv-') && !OWN_CACHES.includes(k)).map((k) => caches.delete(k))
+      keys.filter((k) => k.startsWith('scan-qr-') && !OWN_CACHES.includes(k)).map((k) => caches.delete(k))
     );
     await self.clients.claim();
   })());

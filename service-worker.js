@@ -1,39 +1,30 @@
 /* ============================================================
-   SCAN MGV LIVE — SERVICE WORKER
-   Version : 12.0.0
+   SCAN-QR — SERVICE WORKER
+   Version : 14
+   Objectifs :
+   - Mise en cache contrôlée des fichiers statiques
+   - Mise à jour des fichiers de l'application
+   - Repli hors ligne sur la page principale
+   - Aucune mise en cache ni interception des données Supabase
 
-   Fonctionnalités :
-   - Cache de l'application
-   - Cache des bibliothèques du scanner
-   - Chargement local prioritaire
-   - Secours CDN
-   - Fonctionnement hors ligne
-   - Mise à jour contrôlée des caches
-   - Protection des communications Supabase
+   Changements par rapport à la v13 :
+   - Navigation : une redirection (opaqueredirect) ou une réponse
+     HTTP (404, 500...) est transmise telle quelle au navigateur.
+     Le repli sur index.html n'a lieu QUE si le réseau est
+     réellement indisponible (avant : toute réponse non 200
+     renvoyait l'ancienne page en cache).
+   - Fichiers locaux : réseau d'abord, cache en secours (avant :
+     cache d'abord, ce qui pouvait figer un ancien fichier).
+   - Échec réseau d'une ressource : Response.error() (erreur réseau
+     normale) au lieu d'un faux 503 texte servi comme un script.
    ============================================================ */
 
 "use strict";
 
-/* ============================================================
-   1. CONFIGURATION
-   ============================================================ */
+const SW_VERSION = "14";
 
-const SW_VERSION = "12.0.0";
-
-const APP_CACHE = "scan-qr-app-v12";
-const RUNTIME_CACHE = "scan-qr-runtime-v12";
-
-const CACHE_PREFIX = "scan-qr-";
-
-const REQUEST_TIMEOUT_LOCAL = 5000;
-const REQUEST_TIMEOUT_CDN = 12000;
-
-/*
- * Ressources locales de l'application.
- *
- * Les chemins sont relatifs au dossier dans lequel
- * service-worker.js est installé.
- */
+const APP_CACHE = `scan-qr-app-v${SW_VERSION}`;
+const RUNTIME_CACHE = `scan-qr-runtime-v${SW_VERSION}`;
 
 const APP_SHELL = [
     "./",
@@ -43,634 +34,283 @@ const APP_SHELL = [
 ];
 
 /*
- * Bibliothèques utilisées par le scanner.
- *
- * Si le fichier local est absent, le Service Worker
- * tente de télécharger la bibliothèque depuis son CDN.
+ * Ne pas ajouter ici les URL de l'API Supabase.
+ * Les bibliothèques externes sont mises en cache séparément.
  */
 
-const VENDOR_RESOURCES = [
-    {
-        localPath: "./vendor/html5-qrcode.min.js",
-        cdnURL: "https://unpkg.com/html5-qrcode"
-    },
-    {
-        localPath: "./vendor/supabase.min.js",
-        cdnURL:
-            "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"
-    }
+const VENDOR_HOSTS = [
+    "unpkg.com",
+    "cdn.jsdelivr.net"
 ];
 
-
-/* ============================================================
-   2. OUTILS
-   ============================================================ */
-
-/*
- * Construit une URL absolue à partir d'un chemin local.
- */
+/* ------------------------------------------------------------
+   OUTILS
+   ------------------------------------------------------------ */
 
 function appURL(path) {
     return new URL(path, self.registration.scope).href;
 }
 
-
-/*
- * Vérifie qu'une réponse peut être mise en cache.
- *
- * Les réponses opaques, les erreurs HTTP et les réponses
- * provenant d'une requête interrompue sont refusées.
- */
-
-function isValidResource(response) {
-    if (!response) {
-        return false;
-    }
-
-    if (!response.ok) {
-        return false;
-    }
-
-    if (response.type === "opaque") {
-        return false;
-    }
-
-    if (response.type === "error") {
-        return false;
-    }
-
-    if (response.status === 206) {
-        return false;
-    }
-
-    if (response.status !== 200) {
-        return false;
-    }
-
-    return true;
+function isValidResponse(response) {
+    return Boolean(
+        response &&
+        response.ok &&
+        response.status === 200 &&
+        response.type !== "opaque"
+    );
 }
-
-
-/*
- * Téléchargement avec délai maximal.
- *
- * AbortController permet d'interrompre une requête
- * lorsque le délai est dépassé.
- */
-
-async function fetchWithTimeout(request, timeoutMs) {
-    const controller = new AbortController();
-
-    const timer = setTimeout(() => {
-        controller.abort();
-    }, timeoutMs);
-
-    try {
-        const response = await fetch(request, {
-            signal: controller.signal
-        });
-
-        return response;
-    } finally {
-        clearTimeout(timer);
-    }
-}
-
-
-/*
- * Vérifie qu'une URL appartient au périmètre
- * de l'application.
- */
-
-function isSameOrigin(url) {
-    return url.origin === self.location.origin;
-}
-
-
-/*
- * Identifie les communications dynamiques Supabase.
- *
- * Ces communications ne doivent pas être traitées
- * comme des ressources statiques de l'application.
- */
 
 function isSupabaseRequest(url) {
     const hostname = url.hostname.toLowerCase();
 
     return (
-        hostname === "supabase.co" ||
         hostname.endsWith(".supabase.co") ||
-        hostname === "supabase.com" ||
         hostname.endsWith(".supabase.com")
     );
 }
 
-
-/*
- * Identifie les bibliothèques téléchargées depuis
- * les CDN autorisés.
- */
-
-function isVendorCDN(url) {
-    return (
-        url.origin === "https://unpkg.com" ||
-        url.origin === "https://cdn.jsdelivr.net"
-    );
+function isVendorRequest(url) {
+    return VENDOR_HOSTS.includes(url.hostname.toLowerCase());
 }
 
-
-/*
- * Vérifie qu'une requête peut être mise en cache.
- *
- * Les requêtes POST, PUT, PATCH, DELETE et autres
- * méthodes non GET ne sont jamais mises en cache.
- */
-
-function isCacheableRequest(request) {
-    return (
-        request.method === "GET" &&
-        request.headers.get("range") === null
-    );
+function isSameOrigin(url) {
+    return url.origin === self.location.origin;
 }
 
-
-/* ============================================================
-   3. MISE EN CACHE D'UNE BIBLIOTHÈQUE
-   ============================================================ */
-
-/*
- * Stratégie :
- *
- * 1. Chercher le fichier local.
- * 2. Si le fichier local est absent ou invalide,
- *    essayer le CDN.
- * 3. Enregistrer la ressource sous son URL locale.
- * 4. Enregistrer également la ressource sous son URL CDN.
- *
- * Cette double mise en cache permet de réutiliser
- * une bibliothèque déjà téléchargée.
- */
-
-async function cacheVendor(cache, localPath, cdnURL) {
-    const localURL = appURL(localPath);
-
-    /*
-     * 1. Essayer d'abord le fichier local.
-     */
-
-    try {
-        const localResponse = await fetchWithTimeout(
-            new Request(localURL, {
-                cache: "reload"
-            }),
-            REQUEST_TIMEOUT_LOCAL
-        );
-
-        if (isValidResource(localResponse)) {
-            await cache.put(
-                localURL,
-                localResponse.clone()
-            );
-
-            console.info(
-                "[SCAN-QR SW] Bibliothèque locale mise en cache :",
-                localPath
-            );
-
-            return true;
-        }
-    } catch (error) {
-        console.warn(
-            "[SCAN-QR SW] Fichier local indisponible :",
-            localPath
-        );
+async function cacheResponse(cacheName, request, response) {
+    if (!isValidResponse(response)) {
+        return;
     }
 
-    /*
-     * 2. Essayer le CDN.
-     */
-
-    try {
-        const response = await fetchWithTimeout(
-            new Request(cdnURL, {
-                mode: "cors",
-                credentials: "omit"
-            }),
-            REQUEST_TIMEOUT_CDN
-        );
-
-        if (!isValidResource(response)) {
-            console.warn(
-                "[SCAN-QR SW] Réponse CDN invalide :",
-                cdnURL
-            );
-
-            return false;
-        }
-
-        /*
-         * 3. Enregistrer la bibliothèque sous son URL locale.
-         */
-
-        await cache.put(
-            localURL,
-            response.clone()
-        );
-
-        /*
-         * 4. Enregistrer la bibliothèque sous son URL CDN.
-         */
-
-        const runtimeCache = await caches.open(
-            RUNTIME_CACHE
-        );
-
-        await runtimeCache.put(
-            cdnURL,
-            response.clone()
-        );
-
-        console.info(
-            "[SCAN-QR SW] Bibliothèque CDN mise en cache :",
-            cdnURL
-        );
-
-        return true;
-
-    } catch (error) {
-        console.error(
-            "[SCAN-QR SW] Échec de mise en cache :",
-            cdnURL,
-            error
-        );
-
-        return false;
-    }
+    const cache = await caches.open(cacheName);
+    await cache.put(request, response.clone());
 }
 
-
-/* ============================================================
-   4. INSTALLATION
-   ============================================================ */
+/* ------------------------------------------------------------
+   INSTALLATION
+   ------------------------------------------------------------ */
 
 self.addEventListener("install", event => {
     event.waitUntil(
         (async () => {
-            console.info(
-                "[SCAN-QR SW] Installation :",
-                SW_VERSION
-            );
-
-            const appCache = await caches.open(APP_CACHE);
+            const cache = await caches.open(APP_CACHE);
 
             /*
-             * Mise en cache des ressources principales.
-             *
-             * Chaque ressource est traitée séparément pour
-             * éviter qu'un seul fichier absent bloque
-             * l'ensemble de l'installation.
+             * Chaque fichier est tenté séparément.
+             * Un fichier manquant ne bloque pas toute
+             * l'installation du Service Worker.
              */
-
-            const shellResults = await Promise.allSettled(
+            await Promise.allSettled(
                 APP_SHELL.map(async path => {
                     const url = appURL(path);
 
-                    const response = await fetchWithTimeout(
+                    const response = await fetch(
                         new Request(url, {
                             cache: "reload"
-                        }),
-                        REQUEST_TIMEOUT_LOCAL
+                        })
                     );
 
-                    if (!isValidResource(response)) {
-                        throw new Error(
-                            "Ressource invalide : " + url
+                    if (isValidResponse(response)) {
+                        await cache.put(url, response.clone());
+                    } else {
+                        console.warn(
+                            "[SCAN-QR SW] Fichier non mis en cache :",
+                            url
                         );
                     }
-
-                    await appCache.put(
-                        url,
-                        response.clone()
-                    );
-
-                    return url;
                 })
             );
 
-            shellResults.forEach((result, index) => {
-                if (result.status === "rejected") {
-                    console.warn(
-                        "[SCAN-QR SW] Ressource non mise en cache :",
-                        APP_SHELL[index],
-                        result.reason
-                    );
-                }
-            });
-
             /*
-             * Mise en cache des bibliothèques.
-             *
-             * L'échec d'une bibliothèque ne bloque pas
-             * l'installation du Service Worker.
+             * Active la nouvelle version dès que possible.
              */
-
-            const vendorResults = await Promise.allSettled(
-                VENDOR_RESOURCES.map(resource =>
-                    cacheVendor(
-                        appCache,
-                        resource.localPath,
-                        resource.cdnURL
-                    )
-                )
-            );
-
-            vendorResults.forEach((result, index) => {
-                if (result.status === "rejected") {
-                    console.warn(
-                        "[SCAN-QR SW] Bibliothèque non disponible :",
-                        VENDOR_RESOURCES[index].localPath,
-                        result.reason
-                    );
-                }
-            });
-
-            /*
-             * Activation immédiate de cette version.
-             */
-
             await self.skipWaiting();
-
-            console.info(
-                "[SCAN-QR SW] Installation terminée."
-            );
         })()
     );
 });
 
-
-/* ============================================================
-   5. ACTIVATION
-   ============================================================ */
+/* ------------------------------------------------------------
+   ACTIVATION
+   ------------------------------------------------------------ */
 
 self.addEventListener("activate", event => {
     event.waitUntil(
         (async () => {
-            console.info(
-                "[SCAN-QR SW] Activation :",
-                SW_VERSION
-            );
-
-            /*
-             * Supprimer uniquement les anciens caches
-             * appartenant à cette application.
-             *
-             * Les autres caches du navigateur sont préservés.
-             */
+            const allowedCaches = new Set([
+                APP_CACHE,
+                RUNTIME_CACHE
+            ]);
 
             const cacheNames = await caches.keys();
 
             await Promise.all(
-                cacheNames.map(async cacheName => {
-                    const isOldAppCache =
-                        cacheName.startsWith(CACHE_PREFIX) &&
-                        cacheName !== APP_CACHE &&
-                        cacheName !== RUNTIME_CACHE;
-
-                    if (isOldAppCache) {
-                        await caches.delete(cacheName);
-
-                        console.info(
-                            "[SCAN-QR SW] Ancien cache supprimé :",
-                            cacheName
-                        );
+                cacheNames.map(cacheName => {
+                    /*
+                     * Supprime uniquement les anciens caches
+                     * identifiés comme appartenant à SCAN-QR.
+                     * Aucune donnée locale (localStorage,
+                     * IndexedDB) n'est touchée.
+                     */
+                    if (
+                        cacheName.startsWith("scan-qr-") &&
+                        !allowedCaches.has(cacheName)
+                    ) {
+                        return caches.delete(cacheName);
                     }
+
+                    return Promise.resolve(false);
                 })
             );
-
-            /*
-             * Prendre en charge les pages déjà ouvertes.
-             */
 
             await self.clients.claim();
 
             console.info(
-                "[SCAN-QR SW] Application prête."
+                `[SCAN-QR SW] Activé : v${SW_VERSION}`
             );
         })()
     );
 });
 
+/* ------------------------------------------------------------
+   RECHERCHE DANS LES CACHES ACTUELS
+   ------------------------------------------------------------ */
 
-/* ============================================================
-   6. RECHERCHE D'UNE RESSOURCE DANS LE CACHE
-   ============================================================ */
-
-async function findCachedResource(request, url) {
-    /*
-     * Rechercher d'abord une correspondance exacte.
-     */
-
-    const exactResponse = await caches.match(request);
-
-    if (exactResponse) {
-        return exactResponse;
-    }
-
-    /*
-     * Rechercher ensuite l'URL absolue.
-     */
-
-    const absoluteResponse = await caches.match(url.href);
-
-    if (absoluteResponse) {
-        return absoluteResponse;
-    }
-
-    return null;
+async function findAppCache(request) {
+    const cache = await caches.open(APP_CACHE);
+    return cache.match(request);
 }
 
-
-/* ============================================================
-   7. RESSOURCES STATIQUES DE L'APPLICATION
-   ============================================================ */
-
-/*
- * Stratégie Cache First :
- *
- * - Si la ressource existe dans le cache, la retourner.
- * - Sinon, essayer le réseau.
- * - Si la réponse est valide, l'enregistrer.
- * - Si le réseau échoue, rechercher une ressource de secours.
- */
-
-async function handleStaticRequest(request, url) {
-    const cachedResponse = await findCachedResource(
-        request,
-        url
-    );
-
-    if (cachedResponse) {
-        return cachedResponse;
-    }
-
-    try {
-        const response = await fetch(request);
-
-        if (!isValidResource(response)) {
-            return response;
-        }
-
-        /*
-         * Ne mettre en cache que les ressources de
-         * même origine.
-         */
-
-        if (isSameOrigin(url)) {
-            const cache = await caches.open(APP_CACHE);
-
-            await cache.put(
-                request,
-                response.clone()
-            ).catch(error => {
-                console.warn(
-                    "[SCAN-QR SW] Impossible de mettre en cache :",
-                    url.href,
-                    error
-                );
-            });
-        }
-
-        return response;
-
-    } catch (error) {
-        /*
-         * Une ressource statique inconnue ne doit pas
-         * provoquer une fausse réponse HTML.
-         */
-
-        return new Response(
-            "Ressource indisponible hors ligne.",
-            {
-                status: 503,
-                statusText: "Service Unavailable",
-                headers: {
-                    "Content-Type": "text/plain; charset=utf-8"
-                }
-            }
-        );
-    }
+async function findRuntimeCache(request) {
+    const cache = await caches.open(RUNTIME_CACHE);
+    return cache.match(request);
 }
 
-
-/* ============================================================
-   8. NAVIGATION ET PAGE HORS LIGNE
-   ============================================================ */
-
-/*
- * Stratégie Network First :
- *
- * - Essayer de charger la page depuis le réseau.
- * - En cas d'échec, utiliser la version en cache.
- * - Ne jamais mettre en cache les données Supabase
- *   via cette stratégie.
- */
+/* ------------------------------------------------------------
+   NAVIGATION : RÉSEAU D'ABORD
+   Le repli sur le cache n'est utilisé que si le réseau échoue.
+   ------------------------------------------------------------ */
 
 async function handleNavigation(request) {
+    let response;
+
     try {
-        const response = await fetch(request);
-
-        if (isValidResource(response)) {
-            const cache = await caches.open(APP_CACHE);
-
-            await cache.put(
-                appURL("./index.html"),
-                response.clone()
-            ).catch(error => {
-                console.warn(
-                    "[SCAN-QR SW] Mise à jour du cache HTML impossible :",
-                    error
-                );
-            });
-        }
-
-        return response;
-
+        response = await fetch(request);
     } catch (error) {
-        const cachedPage = await caches.match(
+        /*
+         * Réseau réellement indisponible : repli hors ligne.
+         */
+        const cachedIndex = await findAppCache(
             appURL("./index.html")
         );
 
-        if (cachedPage) {
-            return cachedPage;
+        if (cachedIndex) {
+            return cachedIndex;
         }
 
         return new Response(
-            `<!DOCTYPE html>
+            `<!doctype html>
             <html lang="fr">
             <head>
-                <meta charset="UTF-8">
-                <meta name="viewport"
-                      content="width=device-width, initial-scale=1">
-                <title>SCAN MGV LIVE</title>
-                <style>
-                    body {
-                        margin: 0;
-                        padding: 30px;
-                        background: #131313;
-                        color: #eaea00;
-                        font-family: Arial, sans-serif;
-                        text-align: center;
-                    }
-                    p {
-                        color: #ffffff;
-                        line-height: 1.6;
-                    }
-                </style>
+              <meta charset="utf-8">
+              <meta name="viewport"
+                    content="width=device-width, initial-scale=1">
+              <meta name="theme-color" content="#eaea00">
+              <title>SCAN-QR</title>
             </head>
             <body>
-                <h2>SCAN MGV LIVE</h2>
-                <p>
-                    La page principale n'est pas disponible
-                    dans le cache.
-                </p>
-                <p>
-                    Reconnectez-vous à Internet puis rechargez
-                    l'application.
-                </p>
+              <h2>SCAN-QR</h2>
+              <p>
+                La page de l'application n'est pas disponible
+                hors connexion.
+              </p>
+              <p>
+                Vérifiez votre connexion Internet puis réessayez.
+              </p>
             </body>
             </html>`,
             {
                 status: 503,
                 headers: {
-                    "Content-Type": "text/html; charset=utf-8"
+                    "Content-Type": "text/html; charset=utf-8",
+                    "Cache-Control": "no-store"
                 }
             }
         );
     }
-}
-
-
-/* ============================================================
-   9. BIBLIOTHÈQUES CDN
-   ============================================================ */
-
-/*
- * Les scripts CDN peuvent être servis depuis le cache
- * lorsqu'ils ont été téléchargés précédemment.
- *
- * En l'absence de cache, une requête réseau est tentée.
- */
-
-async function handleVendorRequest(request, url) {
-    const runtimeCache = await caches.open(RUNTIME_CACHE);
 
     /*
-     * Rechercher d'abord l'URL CDN exacte.
+     * Redirection (opaqueredirect), 404, 500... :
+     * la réponse du serveur est transmise telle quelle.
+     * Elle n'est ni masquée par une ancienne page ni mise en cache.
      */
+    if (!isValidResponse(response)) {
+        return response;
+    }
 
-    const cachedResponse = await runtimeCache.match(
-        request
-    );
+    /*
+     * La réponse de navigation est conservée sous la clé
+     * index.html, uniquement pour la page principale de cette PWA.
+     */
+    try {
+        const requestedURL = new URL(request.url);
+        const mainURL = appURL("./");
+        const indexURL = appURL("./index.html");
+
+        if (
+            requestedURL.href === mainURL ||
+            requestedURL.href === indexURL
+        ) {
+            const cache = await caches.open(APP_CACHE);
+            await cache.put(indexURL, response.clone());
+        }
+    } catch (error) {
+        /* Échec d'écriture du cache : sans conséquence. */
+    }
+
+    return response;
+}
+
+/* ------------------------------------------------------------
+   FICHIERS LOCAUX DE L'APPLICATION : RÉSEAU D'ABORD
+   Justification : fichiers peu nombreux et légers ; évite de
+   servir un ancien fichier incompatible avec la page HTML.
+   Le cache sert uniquement de secours hors connexion.
+   ------------------------------------------------------------ */
+
+async function handleStaticRequest(request) {
+    try {
+        const response = await fetch(request);
+
+        if (isValidResponse(response)) {
+            await cacheResponse(
+                APP_CACHE,
+                request,
+                response
+            );
+        }
+
+        return response;
+    } catch (error) {
+        const cachedResponse = await findAppCache(request);
+
+        if (cachedResponse) {
+            return cachedResponse;
+        }
+
+        return Response.error();
+    }
+}
+
+/* ------------------------------------------------------------
+   BIBLIOTHÈQUES EXTERNES : CACHE D'ABORD
+   Justification : bibliothèques tierces ; une fois chargées avec
+   succès, elles restent disponibles hors connexion.
+   Remarque : un script chargé sans attribut crossorigin est une
+   réponse "opaque", qui n'est volontairement pas mise en cache.
+   ------------------------------------------------------------ */
+
+async function handleVendorRequest(request) {
+    const cachedResponse = await findRuntimeCache(request);
 
     if (cachedResponse) {
         return cachedResponse;
@@ -679,73 +319,43 @@ async function handleVendorRequest(request, url) {
     try {
         const response = await fetch(request);
 
-        if (!isValidResource(response)) {
-            return response;
-        }
-
-        await runtimeCache.put(
-            request,
-            response.clone()
-        ).catch(error => {
-            console.warn(
-                "[SCAN-QR SW] Cache CDN indisponible :",
-                url.href,
-                error
+        if (isValidResponse(response)) {
+            await cacheResponse(
+                RUNTIME_CACHE,
+                request,
+                response
             );
-        });
+        }
 
         return response;
-
     } catch (error) {
         /*
-         * La bibliothèque peut avoir été enregistrée
-         * sous un chemin local.
+         * Erreur réseau normale : le navigateur signale l'échec
+         * de chargement du script, comme sans Service Worker.
          */
-
-        const vendor = VENDOR_RESOURCES.find(
-            resource => resource.cdnURL === url.href
-        );
-
-        if (vendor) {
-            const localURL = appURL(vendor.localPath);
-
-            const localResponse = await caches.match(
-                localURL
-            );
-
-            if (localResponse) {
-                return localResponse;
-            }
-        }
-
-        return new Response(
-            "Bibliothèque indisponible hors ligne.",
-            {
-                status: 503,
-                headers: {
-                    "Content-Type": "text/plain; charset=utf-8"
-                }
-            }
-        );
+        return Response.error();
     }
 }
 
-
-/* ============================================================
-   10. INTERCEPTION DES REQUÊTES
-   ============================================================ */
+/* ------------------------------------------------------------
+   INTERCEPTION DES REQUÊTES
+   ------------------------------------------------------------ */
 
 self.addEventListener("fetch", event => {
     const request = event.request;
 
     /*
-     * Ne jamais intercepter les méthodes d'écriture.
-     *
-     * Les opérations INSERT, UPDATE, PATCH et DELETE
-     * doivent conserver leur fonctionnement normal.
+     * Ne jamais intercepter les requêtes non-GET.
+     * Cela protège les écritures, modifications et suppressions.
      */
+    if (request.method !== "GET") {
+        return;
+    }
 
-    if (!isCacheableRequest(request)) {
+    /*
+     * Les requêtes partielles ne sont pas mises en cache.
+     */
+    if (request.headers.has("range")) {
         return;
     }
 
@@ -757,90 +367,63 @@ self.addEventListener("fetch", event => {
         return;
     }
 
-    /*
-     * Ne pas intercepter les protocoles autres que HTTP(S).
-     */
-
     if (
-        url.protocol !== "http:" &&
-        url.protocol !== "https:"
+        url.protocol !== "https:" &&
+        url.protocol !== "http:"
     ) {
         return;
     }
 
     /*
-     * Ne jamais mettre en cache les communications
-     * dynamiques Supabase :
+     * EXCLUSION ABSOLUE DE SUPABASE :
+     * authentification, API REST, données métier et Realtime.
      *
-     * REST, Auth, Realtime, Storage et fonctions API.
-     *
-     * Le réseau et la logique existante de synchronisation
-     * restent responsables de ces communications.
+     * Ces requêtes sont laissées au navigateur et au client
+     * Supabase, sans cache ni réponse fabriquée par ce SW.
      */
-
     if (isSupabaseRequest(url)) {
         return;
     }
 
     /*
-     * 1. Navigation vers une page.
+     * Navigation : uniquement dans la portée de l'application.
      */
-
     if (request.mode === "navigate") {
-        event.respondWith(
-            handleNavigation(request)
-        );
-
-        return;
-    }
-
-    /*
-     * 2. Bibliothèques provenant des CDN autorisés.
-     */
-
-    if (isVendorCDN(url)) {
-        const isKnownVendor = VENDOR_RESOURCES.some(
-            resource => resource.cdnURL === url.href
-        );
-
-        if (isKnownVendor) {
-            event.respondWith(
-                handleVendorRequest(request, url)
-            );
+        if (
+            isSameOrigin(url) &&
+            url.href.startsWith(self.registration.scope)
+        ) {
+            event.respondWith(handleNavigation(request));
         }
-
         return;
     }
 
     /*
-     * 3. Ressources statiques locales.
-     *
-     * Les ressources externes inconnues ne sont pas
-     * interceptées.
+     * Ressources externes telles que les bibliothèques JS.
      */
+    if (isVendorRequest(url)) {
+        event.respondWith(handleVendorRequest(request));
+        return;
+    }
 
+    /*
+     * Fichiers locaux de l'application uniquement.
+     */
     if (isSameOrigin(url)) {
-        event.respondWith(
-            handleStaticRequest(request, url)
-        );
+        event.respondWith(handleStaticRequest(request));
     }
 });
 
+/* ------------------------------------------------------------
+   MESSAGES DE DIAGNOSTIC
+   ------------------------------------------------------------ */
 
-/* ============================================================
-   11. MESSAGES DE DIAGNOSTIC
-   ============================================================ */
-
-    self.addEventListener("message", event => {
+self.addEventListener("message", event => {
     const message = event.data;
 
     if (!message || typeof message !== "object") {
         return;
     }
-
-    /*
-     * Permet à la page de demander la version du SW.
-     */
 
     if (message.type === "GET_SW_VERSION") {
         if (event.ports && event.ports[0]) {
@@ -852,23 +435,8 @@ self.addEventListener("fetch", event => {
         }
     }
 
-    /*
-     * Permet de demander une activation immédiate.
-     */
-
     if (message.type === "SKIP_WAITING") {
-        event.waitUntil(
-            self.skipWaiting()
-        );
+        event.waitUntil(self.skipWaiting());
     }
 });
-
-
-/* ============================================================
-   12. FIN DU SERVICE WORKER
-   ============================================================ */
-
-console.info(
-    "[SCAN-QR SW] Service Worker chargé :",
-    SW_VERSION
-);
+               

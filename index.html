@@ -4,7 +4,6 @@
     <meta charset="utf-8"/>
     <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
     <title>STELLANTIS MGV SCANNER</title>
-    <link rel="manifest" href="./manifest.json">
     <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&amp;display=swap" rel="stylesheet"/>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700;800&amp;display=swap" rel="stylesheet"/>
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
@@ -313,7 +312,9 @@
     }
 
     .op-info .label { font-size: 10px; color: var(--on-surface-variant); }
-      .op-info .value { 
+    
+    /* NOM, PRÉNOM ET ID EN JAUNE DYNAMIQUE ET DESIGN */
+    .op-info .value { 
         font-size: 18px; 
         font-weight: 700; 
         color: var(--primary); 
@@ -558,7 +559,6 @@
 /* ========================================= */
 /* TABLEAU HISTORIQUE (style terminal)       */
 /* ========================================= */
-
 
 .grid-body .grid-row {
     min-height: 64px;
@@ -839,7 +839,7 @@
         to { filter: drop-shadow(0 0 12px rgba(234, 234, 0, 0.8)); }
     }
 </style>
-  </head>
+</head>
 <body>
 <div id="app">
 <header class="top-app-bar">
@@ -904,7 +904,6 @@
                             <option value="Équipe C">Équipe C</option>
                             <option value="Équipe Fer/A">Équipe Fer/A</option>
                             <option value="Équipe Fer/B">Équipe Fer/B</option>
-                              <option value="Équipe Fer/C">Équipe Fer/C</option>
                         </select>
                     </div>
                     <div class="input-group">
@@ -1069,7 +1068,7 @@
     </nav>
 </div>
 <script>
-  /* =====================================================================
+/* =====================================================================
    STELLANTIS MGV - SCANNER_APP
    VERSION FINALE CORRIGÉE - SUPABASE
    =====================================================================
@@ -1091,7 +1090,7 @@
 
    IMPORTANT :
    - operator_id = ID MATRICULE uniquement
-   - equipe_id   = A / B / C / FER/A / FER/B / FER/C
+   - equipe_id   = A / B / C / FER/A / FER/B
    - affichage   = operator_id/equipe_id
    - code        = CODE VIS
    - nom         = NOM / PRÉNOM
@@ -1203,8 +1202,7 @@ const TEAM_EQUIPE_ID_MAP = {
     "Équipe B": "B",
     "Équipe C": "C",
     "Équipe Fer/A": "FER/A",
-    "Équipe Fer/B": "FER/B",  
-    "Équipe Fer/C": "FER/C"
+    "Équipe Fer/B": "FER/B"
 };
 
 
@@ -1283,9 +1281,9 @@ function saveLogsToStorage() {
    Les données non synchronisées ne sont jamais supprimées.
 ===================================================================== */
 
-function nettoyerAnciennesDonnees1Jours() {
+function nettoyerAnciennesDonnees7Jours() {
 
-    const NB_JOURS_MAX = 1;
+    const NB_JOURS_MAX = 7;
 
     const maintenant = Date.now();
 
@@ -1978,7 +1976,8 @@ function startScanner() {
    13. ARRÊT SCANNER
    Conserve la même signature synchrone : stopScanner()
 ===================================================================== */
-  function stopScanner() {
+
+function stopScanner() {
 
     // Invalide immédiatement tout callback de scan en cours
     scannerSessionId++;
@@ -2710,7 +2709,7 @@ cacheUserForOffline(
 /* =====================================================================
    18. INSCRIPTION
 ===================================================================== */
-  document
+document
     .getElementById("registerForm")
     ?.addEventListener(
         "submit",
@@ -3458,10 +3457,63 @@ async function sendRecordToSupabase(
 /* =====================================================================
    24. SYNCHRONISATION DES DONNÉES EN ATTENTE
 ===================================================================== */
- /* =====================================================================
-   24. SYNCHRONISATION DES DONNÉES EN ATTENTE
-===================================================================== */
-  lol--------
+
+async function syncPendingRecords(
+    showEmptyAlert = false
+) {
+
+    if (!navigator.onLine) {
+
+        if (showEmptyAlert) {
+
+            alert(
+                "CONNEXION INTERNET INDISPONIBLE."
+            );
+
+        }
+
+        return;
+
+    }
+
+
+    const pendingRecords =
+        logs.filter(
+            record =>
+                !record.sync
+        );
+
+
+    if (
+        pendingRecords.length === 0
+    ) {
+
+        if (showEmptyAlert) {
+
+            alert(
+                "TOUTES LES DONNÉES SONT DÉJÀ À JOUR."
+            );
+
+        }
+
+        return;
+
+    }
+
+
+    const syncIcon =
+        document.getElementById(
+            "syncIconEl"
+        );
+
+
+    if (syncIcon) {
+
+        syncIcon.classList.add(
+            "sync-rotating"
+        );
+
+    }
 
 
     let successCount =
@@ -3515,6 +3567,8 @@ async function sendRecordToSupabase(
     }
 
 }
+
+
 /* =====================================================================
    25. CHARGEMENT DES DONNÉES DE L'OPÉRATEUR DEPUIS SUPABASE
 ===================================================================== */
@@ -4314,7 +4368,8 @@ document
 /* =====================================================================
    34. EXPORT CSV
 ===================================================================== */
-  document
+
+document
     .getElementById(
         "exportCsvBtn"
     )
@@ -4702,37 +4757,6 @@ if (
     }
 
 }
-    /* =====================================================================
-   ENREGISTREMENT DU SERVICE WORKER — SCANNER_APP
-===================================================================== */
-
-if ("serviceWorker" in navigator) {
-    window.addEventListener("load", async () => {
-        try {
-            const registration =
-                await navigator.serviceWorker.register(
-                    "./service-worker.js",
-                    {
-                        scope: "./"
-                    }
-                );
-
-            console.log(
-                "[SCANNER_APP] Service Worker enregistré :",
-                registration.scope
-            );
-
-            // Vérifier si une nouvelle version est disponible.
-            await registration.update();
-
-        } catch (error) {
-            console.error(
-                "[SCANNER_APP] Échec de l'enregistrement du Service Worker :",
-                error
-            );
-        }
-    });
-    }
 
 
 /* =====================================================================
@@ -4741,6 +4765,3 @@ if ("serviceWorker" in navigator) {
 </script>
 </body>
 </html>
-  
-    
-    /* NOM, PRÉNOM ET ID EN JAUNE DYNAMIQUE ET DESIGN */

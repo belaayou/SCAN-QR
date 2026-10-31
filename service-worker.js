@@ -23,7 +23,7 @@
 
 const SW_VERSION = "15";
 
-const APP_CACHE = `scanner_APP-app-v${SW_VERSION}`;
+const APP_CACHE = `scanner_APP-app-v15{SW_VERSION}`;
 const RUNTIME_CACHE = `scanner_APP-runtime-v${SW_VERSION}`;
 
 const APP_SHELL = [

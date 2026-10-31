@@ -1,13 +1,13 @@
 /* ============================================================
-   SCAN-QR — SERVICE WORKER
-   Version : 14
+   SCANNER — SERVICE WORKER
+   Version : 15
    Objectifs :
    - Mise en cache contrôlée des fichiers statiques
    - Mise à jour des fichiers de l'application
    - Repli hors ligne sur la page principale
    - Aucune mise en cache ni interception des données Supabase
 
-   Changements par rapport à la v13 :
+   Changements par rapport à la v15 :
    - Navigation : une redirection (opaqueredirect) ou une réponse
      HTTP (404, 500...) est transmise telle quelle au navigateur.
      Le repli sur index.html n'a lieu QUE si le réseau est
@@ -21,10 +21,10 @@
 
 "use strict";
 
-const SW_VERSION = "14";
+const SW_VERSION = "15";
 
-const APP_CACHE = `scan-qr-app-v${SW_VERSION}`;
-const RUNTIME_CACHE = `scan-qr-runtime-v${SW_VERSION}`;
+const APP_CACHE = `scanner-app-v${SW_VERSION}`;
+const RUNTIME_CACHE = `scanner-runtime-v${SW_VERSION}`;
 
 const APP_SHELL = [
     "./",
@@ -114,7 +114,7 @@ self.addEventListener("install", event => {
                         await cache.put(url, response.clone());
                     } else {
                         console.warn(
-                            "[SCAN-QR SW] Fichier non mis en cache :",
+                            "[SCANNER SW] Fichier non mis en cache :",
                             url
                         );
                     }
@@ -147,12 +147,12 @@ self.addEventListener("activate", event => {
                 cacheNames.map(cacheName => {
                     /*
                      * Supprime uniquement les anciens caches
-                     * identifiés comme appartenant à SCAN-QR.
+                     * identifiés comme appartenant à SCANNER.
                      * Aucune donnée locale (localStorage,
                      * IndexedDB) n'est touchée.
                      */
                     if (
-                        cacheName.startsWith("scan-qr-") &&
+                        cacheName.startsWith("scanner-") &&
                         !allowedCaches.has(cacheName)
                     ) {
                         return caches.delete(cacheName);
@@ -165,7 +165,7 @@ self.addEventListener("activate", event => {
             await self.clients.claim();
 
             console.info(
-                `[SCAN-QR SW] Activé : v${SW_VERSION}`
+                `[SCANNER SW] Activé : v${SW_VERSION}`
             );
         })()
     );
@@ -215,10 +215,10 @@ async function handleNavigation(request) {
               <meta name="viewport"
                     content="width=device-width, initial-scale=1">
               <meta name="theme-color" content="#eaea00">
-              <title>SCAN-QR</title>
+              <title>SCANNER</title>
             </head>
             <body>
-              <h2>SCAN-QR</h2>
+              <h2>SCANNER</h2>
               <p>
                 La page de l'application n'est pas disponible
                 hors connexion.

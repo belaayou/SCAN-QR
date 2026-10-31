@@ -1283,9 +1283,9 @@ function saveLogsToStorage() {
    Les données non synchronisées ne sont jamais supprimées.
 ===================================================================== */
 
-function nettoyerAnciennesDonnees7Jours() {
+function nettoyerAnciennesDonnees1Jours() {
 
-    const NB_JOURS_MAX = 7;
+    const NB_JOURS_MAX = 1;
 
     const maintenant = Date.now();
 
@@ -4703,7 +4703,7 @@ if (
 
 }
     /* =====================================================================
-   ENREGISTREMENT DU SERVICE WORKER — SCAN-QR
+   ENREGISTREMENT DU SERVICE WORKER — SCANNER_APP
 ===================================================================== */
 
 if ("serviceWorker" in navigator) {
@@ -4718,7 +4718,7 @@ if ("serviceWorker" in navigator) {
                 );
 
             console.log(
-                "[SCAN-QR] Service Worker enregistré :",
+                "[SCANNER_APP] Service Worker enregistré :",
                 registration.scope
             );
 
@@ -4727,7 +4727,7 @@ if ("serviceWorker" in navigator) {
 
         } catch (error) {
             console.error(
-                "[SCAN-QR] Échec de l'enregistrement du Service Worker :",
+                "[SCANNER_APP] Échec de l'enregistrement du Service Worker :",
                 error
             );
         }

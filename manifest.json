@@ -1,6 +1,6 @@
 {
   "id": "./",
-   "name": "SCAN MGV Stellantis",
+   "name": "SCAN-QR",
   "short_name": "SCAN-QR",
   "description": "Application de scan des codes QR et de gestion des scans.",
   "lang": "fr",

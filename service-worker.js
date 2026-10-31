@@ -1,5 +1,5 @@
 /* ============================================================
-   SCANNER — SERVICE WORKER
+   SCANNER_APP — SERVICE WORKER
    Version : 15
    Objectifs :
    - Mise en cache contrôlée des fichiers statiques
@@ -23,8 +23,8 @@
 
 const SW_VERSION = "15";
 
-const APP_CACHE = `scanner-app-v${SW_VERSION}`;
-const RUNTIME_CACHE = `scanner-runtime-v${SW_VERSION}`;
+const APP_CACHE = `scanner_APP-app-v${SW_VERSION}`;
+const RUNTIME_CACHE = `scanner_APP-runtime-v${SW_VERSION}`;
 
 const APP_SHELL = [
     "./",
@@ -114,7 +114,7 @@ self.addEventListener("install", event => {
                         await cache.put(url, response.clone());
                     } else {
                         console.warn(
-                            "[SCANNER SW] Fichier non mis en cache :",
+                            "[SCANNER_APP SW] Fichier non mis en cache :",
                             url
                         );
                     }
@@ -147,12 +147,12 @@ self.addEventListener("activate", event => {
                 cacheNames.map(cacheName => {
                     /*
                      * Supprime uniquement les anciens caches
-                     * identifiés comme appartenant à SCANNER.
+                     * identifiés comme appartenant à SCANNER_APP.
                      * Aucune donnée locale (localStorage,
                      * IndexedDB) n'est touchée.
                      */
                     if (
-                        cacheName.startsWith("scanner-") &&
+                        cacheName.startsWith("scanner_APP-") &&
                         !allowedCaches.has(cacheName)
                     ) {
                         return caches.delete(cacheName);
@@ -215,10 +215,10 @@ async function handleNavigation(request) {
               <meta name="viewport"
                     content="width=device-width, initial-scale=1">
               <meta name="theme-color" content="#eaea00">
-              <title>SCANNER</title>
+              <title>SCANNER_APP</title>
             </head>
             <body>
-              <h2>SCANNER</h2>
+              <h2>SCANNER_APP</h2>
               <p>
                 La page de l'application n'est pas disponible
                 hors connexion.

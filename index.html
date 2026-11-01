@@ -4,6 +4,70 @@
     <meta charset="utf-8"/>
     <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
     <title>STELLANTIS MGV SCANNER</title>
+    <link rel="manifest" href="./manifest.json"/>
+    <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png"/>
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png"/>
+    <meta name="mobile-web-app-capable" content="yes"/>
+    <meta name="apple-mobile-web-app-capable" content="yes"/>
+    <meta name="apple-mobile-web-app-title" content="SCAN-QR"/>
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+    <meta name="theme-color" content="#eaea00"/>
+    <script>
+    /* SCAN-QR - GARDE DE DÉMARRAGE (diagnostic + anti-rechargement silencieux)
+       - Un <form> sans gestionnaire JS se soumet nativement : la page se recharge et
+         les champs sont vidés. Cette garde l'empêche et affiche la cause réelle.
+       - Aucune donnée locale (localStorage / IndexedDB) n'est lue, modifiée ou effacée.
+       - Journal console uniquement si localStorage.scanqr_debug === "1". */
+    (function () {
+        var errors = [];
+        function dbg() {
+            try {
+                if (localStorage.getItem("scanqr_debug") === "1") {
+                    console.log.apply(console, ["[SCAN-QR]"].concat([].slice.call(arguments)));
+                }
+            } catch (e) {}
+        }
+        window.__scanqrLog = dbg;
+        window.__scanqrErrors = errors;
+        window.addEventListener("error", function (e) {
+            var t = e && e.target;
+            if (t && t !== window && t.tagName) {
+                var src = "";
+                try { src = new URL(t.src || t.href, location.href).host; } catch (x) {}
+                errors.push("chargement échoué : <" + t.tagName.toLowerCase() + "> " + src);
+            } else {
+                errors.push("erreur JS : " + ((e && e.message) || "inconnue") + " (ligne " + ((e && e.lineno) || "?") + ")");
+            }
+            dbg(errors[errors.length - 1]);
+        }, true);
+        document.addEventListener("submit", function (ev) {
+            if (ev.defaultPrevented) { return; }   /* géré par l'application : rien à faire */
+            ev.preventDefault();                   /* évite le rechargement + effacement des champs */
+            var detail = errors.length ? "\n\n" + errors.slice(0, 3).join("\n") : "";
+            var already = false;
+            try { already = sessionStorage.getItem("scanqr_recover") === "1"; } catch (e) {}
+            if (already) {
+                alert("L'APPLICATION N'A PAS DÉMARRÉ CORRECTEMENT. FERMEZ-LA PUIS ROUVREZ-LA." + detail);
+                return;
+            }
+            try { sessionStorage.setItem("scanqr_recover", "1"); } catch (e) {}
+            var jobs = [];
+            if (window.caches) {
+                jobs.push(caches.keys().then(function (ks) {
+                    return Promise.all(ks.filter(function (k) { return k.indexOf("scan-qr-") === 0; })
+                        .map(function (k) { return caches.delete(k); }));
+                }));
+            }
+            if (navigator.serviceWorker) {
+                jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) {
+                    return Promise.all(rs.map(function (r) { return r.update(); }));
+                }));
+            }
+            Promise.all(jobs).catch(function () {}).then(function () { location.reload(); });
+        }, false);
+        dbg("démarrage", location.pathname, "standalone=" + (window.matchMedia && matchMedia("(display-mode: standalone)").matches));
+    })();
+    </script>
     <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&amp;display=swap" rel="stylesheet"/>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700;800&amp;display=swap" rel="stylesheet"/>
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
@@ -4762,6 +4826,29 @@ if (
 /* =====================================================================
    FIN DU SCRIPT
 ===================================================================== */
+</script>
+<script>
+/* SCAN-QR - ENREGISTREMENT DU SERVICE WORKER (portée = dossier de la page) */
+(function () {
+    /* Drapeau de récupération effacé seulement si le démarrage s'est déroulé sans erreur. */
+    if (!(window.__scanqrErrors && window.__scanqrErrors.length)) {
+        try { sessionStorage.removeItem("scanqr_recover"); } catch (e) {}
+    }
+    if (window.__scanqrLog) {
+        window.__scanqrLog("bibliothèques", { supabase: !!window.supabase, html5qrcode: !!window.Html5Qrcode, online: navigator.onLine });
+    }
+    if (!("serviceWorker" in navigator)) { return; }
+    window.addEventListener("load", function () {
+        navigator.serviceWorker.register("./service-worker.js", { scope: "./", updateViaCache: "none" })
+            .then(function (reg) {
+                if (window.__scanqrLog) { window.__scanqrLog("service worker enregistré", reg.scope); }
+                reg.update().catch(function () {});
+            })
+            .catch(function (err) {
+                if (window.__scanqrLog) { window.__scanqrLog("échec service worker", err && err.message); }
+            });
+    });
+})();
 </script>
 </body>
 </html>

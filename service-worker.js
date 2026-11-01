@@ -1,6 +1,6 @@
 /* ============================================================
    SCAN-QR — SERVICE WORKER
-   Version : 14
+   Version : 15
    Objectifs :
    - Mise en cache contrôlée des fichiers statiques
    - Mise à jour des fichiers de l'application
@@ -21,7 +21,7 @@
 
 "use strict";
 
-const SW_VERSION = "14";
+const SW_VERSION = "15";
 
 const APP_CACHE = `scan-qr-app-v${SW_VERSION}`;
 const RUNTIME_CACHE = `scan-qr-runtime-v${SW_VERSION}`;
@@ -30,7 +30,10 @@ const APP_SHELL = [
     "./",
     "./index.html",
     "./manifest.json",
-    "./IMG_20260413_130653.png"
+    "./icons/icon-192.png",
+    "./icons/icon-512.png",
+    "./icons/icon-maskable-512.png",
+    "./icons/apple-touch-icon.png"
 ];
 
 /*
